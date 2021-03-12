@@ -5,11 +5,6 @@ date: "February 28, 2020"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
-
-
 ```{r load}
 library(sas7bdat)
 library(openxlsx)
@@ -19,8 +14,12 @@ library(ggplot2)
 library(ggrepel)
 library(corrplot)
 library(logbin)
+library(epitools)
 path <- 'F:/Drive/Urine_Metals/Urine-Metals-ASD'
+```
 
+# Load data files
+```{r load}
 urine.metals <- readRDS(file=file.path(path,'Data/urine_metals.RDS'))
 spec.grav <- readRDS(file=file.path(path,'Data/spgrav.rds'))
 marbearl <- read.sas7bdat(file=file.path(path,'Data/e_m_covars_v5_20191115.sas7bdat'))
@@ -31,7 +30,7 @@ metals <- as.list(metals)
 names(metals) <- unlist(metals)
 ```
 
-Specific gravity adjustment
+# Specific gravity adjustment
 ```{r spec grav}
 #check to make sure IDs are all present
 table(spec.grav$SID %in% urine.metals$SID)
@@ -80,7 +79,7 @@ dev.off()
 ```
 
 
-Merge in ASD data and remove multiple births
+# Merge in ASD data and remove multiple births
 ```{r dx_alg}
 table(urine.Zscore$fam %in% marbearl$famid) #all T
 
@@ -680,193 +679,6 @@ plot.tm('Mercury')
 plot.tm('Cadmium')
 ```
 
-
-```{r earli models}
-# model_fit <- function(name, pd){
-#   asd.res <- list()
-#   ntd.res <- list()
-#   
-#   sink(file.path(path,name))
-#   for(met in metals){
-#     sub = pd %>% filter(Analyte.Code==met)
-#   
-#     asd = sub %>% filter(asd %in% c('TD','ASD'))
-#     asd$asd = factor(asd$asd)
-#     ntd = sub %>% filter(asd %in% c('TD','Non-TD'))
-#     ntd$asd = factor(ntd$asd)
-#   
-#     if(mod.type[met] == 'continuous'){
-#   
-#       #asd$Concentration_sg <- ifelse(asd$Concentration_sg<=0, NA, log(asd$Concentration_sg))
-#       #ntd$Concentration_sg <- ifelse(ntd$Concentration_sg<=0, NA, log(ntd$Concentration_sg))
-#   
-#       fit.asd = glm(asd ~ Concentration_sg + MomEdu + coi_gender + maternal_age + GA_deliv_wks, 
-#                     data=asd, family=binomial(link="logit"))
-#       fit.ntd = glm(asd ~ Concentration_sg + MomEdu + coi_gender + maternal_age + GA_deliv_wks, 
-#                     data=ntd, family=binomial(link="logit"))
-#     }else{
-#       
-#       asd$overLOD <- asd$Concentration > asd$LOD
-#       ntd$overLOD <- ntd$Concentration > ntd$LOD
-#       
-#       fit.asd = glm(asd ~ overLOD + MomEdu + coi_gender + maternal_age + GA_deliv_wks, 
-#                     data=asd, binomial(link="logit"))
-#       fit.ntd = glm(asd ~ overLOD + MomEdu + coi_gender + maternal_age + GA_deliv_wks, 
-#                     data=ntd, binomial(link="logit"))
-#       
-#       fit.asd = logbin(asd ~ overLOD + MomEdu + coi_gender + maternal_age + GA_deliv_wks, data=asd)
-#       #fit.ntd = logbin(asd ~ overLOD + MomEdu + coi_gender + maternal_age + GA_deliv_wks, data=ntd, maxit=100000000)
-#       
-#       init.asd = glm(asd ~ GA_deliv_wks,
-#                     data=asd, binomial(link="log"), start=c(0.5, -0.5))
-#       fit.asd = glm(asd ~ Concentration_sg + MomEdu + coi_gender + maternal_age + GA_deliv_wks, 
-#                     data=asd, poisson)
-#     
-#       ggplot(asd, aes(x=asd, y=GA_deliv_wks)) + geom_violin() + geom_jitter()
-#     }
-#   
-#     asd.res[[met]] <- fit.asd
-#     ntd.res[[met]] <- fit.ntd
-#   
-#     print(met)
-#     print(summary(fit.asd))
-#     print(IQR(asd$Concentration, na.rm=T))
-#     print(summary(fit.ntd))
-#     print(IQR(ntd$Concentration, na.rm=T))
-#     print('')
-#   }
-#   sink()
-#   
-#   return(list(asd=asd.res, ntd=ntd.res))
-# }
-
-model_fit_logbin <- function(pd){
-  asd.res <- list()
-  ntd.res <- list()
-  
-  for(met in metals){
-    sub = pd %>% filter(Analyte.Code==met)
-  
-    asd = sub %>% filter(asd %in% c('TD','ASD'))
-    asd$asd = ifelse(asd$asd=='TD',0,1)
-    ntd = sub %>% filter(asd %in% c('TD','Non-TD'))
-    ntd$asd = ifelse(ntd$asd=='TD',0,1)
-
-    print(met)
-    
-    if(mod.type[met] == 'continuous'){
-  
-      #fit.asd = glm(asd ~ Concentration_sg + MomEdu + coi_gender + maternal_age + GA_deliv_wks, 
-      #              data=asd, poisson)
-      #fit.ntd = glm(asd ~ Concentration_sg + MomEdu + coi_gender + maternal_age + GA_deliv_wks, 
-      #              data=ntd, poisson)
-      
-      fit.asd = logbin(asd ~ Concentration_sg + MomEdu + coi_gender + maternal_age + GA_deliv_wks, data=asd, bound.tol=1e-20, epsilon=1e-30, maxit=10000000)
-      fit.ntd = logbin(asd ~ Concentration_sg + MomEdu + coi_gender + maternal_age + GA_deliv_wks, data=ntd, bound.tol=1e-20, epsilon=1e-30, maxit=10000000)
-      
-    }else{
-      
-      asd$overLOD <- asd$Concentration > asd$LOD
-      ntd$overLOD <- ntd$Concentration > ntd$LOD
-      
-      #fit.asd = glm(asd ~ overLOD + MomEdu + coi_gender + maternal_age + GA_deliv_wks, 
-      #              data=asd, poisson)
-      #fit.ntd = glm(asd ~ overLOD + MomEdu + coi_gender + maternal_age + GA_deliv_wks, 
-      #              data=ntd, poisson)
-      
-      fit.asd = logbin(asd ~ overLOD + MomEdu + coi_gender + maternal_age + GA_deliv_wks, data=asd, bound.tol=1e-20, epsilon=1e-30, maxit=10000000)
-      fit.ntd = logbin(asd ~ overLOD + MomEdu + coi_gender + maternal_age + GA_deliv_wks, data=ntd, bound.tol=1e-20, epsilon=1e-30, maxit=10000000)
-    }
-  
-    asd.res[[met]] <- fit.asd
-    ntd.res[[met]] <- fit.ntd
-  }
-  
-  return(list(asd=asd.res, ntd=ntd.res))
-}
-
-# earli.resT2 <- model_fit("EARLI_T2_logreg_estimates.txt", metals.earli.T2)
-# earli.resT3 <- model_fit("EARLI_T3_logreg_estimates.txt", metals.earli.T3)
-
-
-earli.resT2.logbin <- model_fit_logbin(metals.earli.T2)
-earli.resT3.logbin <- model_fit_logbin(metals.earli.T3)
-```
-
-
-```{r earli extract}
-
-extract_res <- function(res, pd, IQRs){
-  summ <- pd %>% group_by(Analyte.Code, asd) %>% 
-    filter(!is.na(Concentration) & asd %in% c('TD','ASD')) %>%
-  summarize(mean=mean(Concentration), 
-            sd=sd(Concentration), 
-            above_lod=sum(Concentration>LOD),
-            n=n(), 
-            pct_over_LOD=round(above_lod/n*100,1)) %>%
-  data.frame()
-
-
-  estimates <- sapply(metals, FUN=function(x){
-    summary(res[[x]])$coefficients[2,1]
-  })
-  
-  sds <- sapply(metals, FUN=function(x){
-    summary(res[[x]])$coefficients[2,2]
-  })
-  
-  pvals <- sapply(metals, FUN=function(x){
-    summary(res[[x]])$coefficients[2,4]
-  })
-  
-  fits <- summ %>% group_by(Analyte.Code) %>%
-    mutate(model=mod.type[Analyte.Code], 
-           estimate=estimates[Analyte.Code],
-           se=sds[Analyte.Code],
-           pval=pvals[Analyte.Code]) %>% data.frame
-  
-  fits$lower <- ifelse(fits$model=='binary',
-                      round(exp(fits$estimate-1.96*fits$se),2),                                  round(exp(fits$estimate*IQRs[fits$Analyte.Code]-1.96*fits$se*IQRs[fits$Analyte.Code]),4))
-  fits$OR <- ifelse(fits$model=='binary',
-                      round(exp(fits$estimate),2),
-                      round(exp(fits$estimate*IQRs[fits$Analyte.Code]),4))
-  fits$upper <- ifelse(fits$model=='binary',
-                      round(exp(fits$estimate+1.96*fits$se),2),                               round(exp(fits$estimate*IQRs[fits$Analyte.Code]+1.96*fits$se*IQRs[fits$Analyte.Code]),4))
-  
-  fits$CI <- paste0(fits$OR, '(', fits$lower, ',', fits$upper,')')
-    
-  fits$Analyte.Code[seq(2,44,2)] <- NA
-  fits$model[seq(2,44,2)] <- NA
-  fits$estimate[seq(2,44,2)] <- NA
-  fits$se[seq(2,44,2)] <- NA
-  fits$pval[seq(2,44,2)] <- NA
-  fits$CI[seq(2,44,2)] <- NA
-  
-  fits
-}
-
-# earli.asd.T2 <- extract_res(earli.resT2$asd, metals.earli.T2, IQRs.T2)
-# earli.ntd.T2 <- extract_res(earli.resT2$ntd, metals.earli.T2, IQRs.T2)
-# 
-# earli.asd.T3 <- extract_res(earli.resT3$asd, metals.earli.T3, IQRs.T3)
-# earli.ntd.T3 <- extract_res(earli.resT3$ntd, metals.earli.T3, IQRs.T3)
-# 
-# write.csv(earli.asd.T2, file='Tables/earli_T2_logreg_asd.csv', row.names=F, na='')
-# write.csv(earli.ntd.T2, file='Tables/earli_T2_logreg_ntd.csv', row.names=F, na='')
-# write.csv(earli.asd.T3, file='Tables/earli_T3_logreg_asd.csv', row.names=F, na='')
-# write.csv(earli.ntd.T3, file='Tables/earli_T3_logreg_ntd.csv', row.names=F, na='')
-
-
-
-earli.asd.T2.poi <- extract_res(earli.resT2.logbin$asd, metals.earli.T2, IQRs.T2)
-earli.ntd.T2.poi <- extract_res(earli.resT2.logbin$ntd, metals.earli.T2, IQRs.T2)
-
-earli.asd.T3.poi <- extract_res(earli.resT3.logbin$asd, metals.earli.T3, IQRs.T3)
-earli.ntd.T3.poi <- extract_res(earli.resT3.logbin$ntd, metals.earli.T3, IQRs.T3)
-
-```
-
-
 # MARBLES
 
 ```{r asd_metal_marb}
@@ -1252,31 +1064,120 @@ plot.tm('Mercury')
 plot.tm('Cadmium')
 ```
 
+#model fitting
 
-```{r marbles models}
+```{r models}
+model_fit_logbin <- function(pd){
+  asd.res <- list()
+  ntd.res <- list()
+  
+  for(met in metals){
+    sub = pd %>% filter(Analyte.Code==met)
+  
+    asd = sub %>% filter(asd %in% c('TD','ASD'))
+    asd$asd = ifelse(asd$asd=='TD',0,1)
+    ntd = sub %>% filter(asd %in% c('TD','Non-TD'))
+    ntd$asd = ifelse(ntd$asd=='TD',0,1)
 
-# marbles.resT2 <- model_fit("MARBLES_T2_logreg_estimates.txt", metals.marbles.T2)
-# marbles.resT3 <- model_fit("MARBLES_T3_logreg_estimates.txt", metals.marbles.T3)
-# 
-# sink()
+    print(met)
+    
+    if(mod.type[met] == 'continuous'){
+  
+      #fit.asd = glm(asd ~ Concentration_sg + MomEdu + coi_gender + maternal_age + GA_deliv_wks, 
+      #              data=asd, poisson)
+      #fit.ntd = glm(asd ~ Concentration_sg + MomEdu + coi_gender + maternal_age + GA_deliv_wks, 
+      #              data=ntd, poisson)
+      
+      fit.asd = logbin(asd ~ Concentration_sg + MomEdu + coi_gender + maternal_age + GA_deliv_wks, data=asd, bound.tol=1e-20, epsilon=1e-30, maxit=10000000)
+      fit.ntd = logbin(asd ~ Concentration_sg + MomEdu + coi_gender + maternal_age + GA_deliv_wks, data=ntd, bound.tol=1e-20, epsilon=1e-30, maxit=10000000)
+      
+    }else{
+      
+      asd$overLOD <- asd$Concentration > asd$LOD
+      ntd$overLOD <- ntd$Concentration > ntd$LOD
+      
+      #fit.asd = glm(asd ~ overLOD + MomEdu + coi_gender + maternal_age + GA_deliv_wks, 
+      #              data=asd, poisson)
+      #fit.ntd = glm(asd ~ overLOD + MomEdu + coi_gender + maternal_age + GA_deliv_wks, 
+      #              data=ntd, poisson)
+      
+      fit.asd = logbin(asd ~ overLOD + MomEdu + coi_gender + maternal_age + GA_deliv_wks, data=asd, bound.tol=1e-20, epsilon=1e-30, maxit=10000000)
+      fit.ntd = logbin(asd ~ overLOD + MomEdu + coi_gender + maternal_age + GA_deliv_wks, data=ntd, bound.tol=1e-20, epsilon=1e-30, maxit=10000000)
+    }
+  
+    asd.res[[met]] <- fit.asd
+    ntd.res[[met]] <- fit.ntd
+  }
+  
+  return(list(asd=asd.res, ntd=ntd.res))
+}
+
+
+earli.resT2.logbin <- model_fit_logbin(metals.earli.T2)
+earli.resT3.logbin <- model_fit_logbin(metals.earli.T3)
 
 marbles.resT2.logbin <- model_fit_logbin(metals.marbles.T2)
 marbles.resT3.logbin <- model_fit_logbin(metals.marbles.T3)
-
 ```
 
-```{r}
-# marbles.asd.T2 <- extract_res(marbles.resT2$asd, metals.marbles.T2, IQRs.mT2)
-# marbles.ntd.T2 <- extract_res(marbles.resT2$ntd, metals.marbles.T2, IQRs.mT2)
-# 
-# marbles.asd.T3 <- extract_res(marbles.resT3$asd, metals.marbles.T3, IQRs.mT3)
-# marbles.ntd.T3 <- extract_res(marbles.resT3$ntd, metals.marbles.T3, IQRs.mT3)
-# 
-# write.csv(marbles.asd.T2, file='Tables/marbles_T2_logreg_asd.csv', row.names=F, na='')
-# write.csv(marbles.ntd.T2, file='Tables/marbles_T2_logreg_ntd.csv', row.names=F, na='')
-# write.csv(marbles.asd.T3, file='Tables/marbles_T3_logreg_asd.csv', row.names=F, na='')
-# write.csv(marbles.ntd.T3, file='Tables/marbles_T3_logreg_ntd.csv', row.names=F, na='')
 
+```{r extract}
+
+extract_res <- function(res, pd, IQRs){
+  summ <- pd %>% group_by(Analyte.Code, asd) %>% 
+    filter(!is.na(Concentration) & asd %in% c('TD','ASD')) %>%
+  summarize(mean=mean(Concentration), 
+            sd=sd(Concentration), 
+            above_lod=sum(Concentration>LOD),
+            n=n(), 
+            pct_over_LOD=round(above_lod/n*100,1)) %>%
+  data.frame()
+
+
+  estimates <- sapply(metals, FUN=function(x){
+    summary(res[[x]])$coefficients[2,1]
+  })
+  
+  sds <- sapply(metals, FUN=function(x){
+    summary(res[[x]])$coefficients[2,2]
+  })
+  
+  pvals <- sapply(metals, FUN=function(x){
+    summary(res[[x]])$coefficients[2,4]
+  })
+  
+  fits <- summ %>% group_by(Analyte.Code) %>%
+    mutate(model=mod.type[Analyte.Code], 
+           estimate=estimates[Analyte.Code],
+           se=sds[Analyte.Code],
+           pval=pvals[Analyte.Code]) %>% data.frame
+  
+  fits$lower <- ifelse(fits$model=='binary',
+                      round(exp(fits$estimate-1.96*fits$se),2),                                  round(exp(fits$estimate*IQRs[fits$Analyte.Code]-1.96*fits$se*IQRs[fits$Analyte.Code]),4))
+  fits$OR <- ifelse(fits$model=='binary',
+                      round(exp(fits$estimate),2),
+                      round(exp(fits$estimate*IQRs[fits$Analyte.Code]),4))
+  fits$upper <- ifelse(fits$model=='binary',
+                      round(exp(fits$estimate+1.96*fits$se),2),                               round(exp(fits$estimate*IQRs[fits$Analyte.Code]+1.96*fits$se*IQRs[fits$Analyte.Code]),4))
+  
+  fits$CI <- paste0(fits$OR, '(', fits$lower, ',', fits$upper,')')
+    
+  fits$Analyte.Code[seq(2,44,2)] <- NA
+  fits$model[seq(2,44,2)] <- NA
+  fits$estimate[seq(2,44,2)] <- NA
+  fits$se[seq(2,44,2)] <- NA
+  fits$pval[seq(2,44,2)] <- NA
+  fits$CI[seq(2,44,2)] <- NA
+  
+  fits
+}
+
+
+earli.asd.T2.poi <- extract_res(earli.resT2.logbin$asd, metals.earli.T2, IQRs.T2)
+earli.ntd.T2.poi <- extract_res(earli.resT2.logbin$ntd, metals.earli.T2, IQRs.T2)
+
+earli.asd.T3.poi <- extract_res(earli.resT3.logbin$asd, metals.earli.T3, IQRs.T3)
+earli.ntd.T3.poi <- extract_res(earli.resT3.logbin$ntd, metals.earli.T3, IQRs.T3)
 
 marbles.asd.T2.poi <- extract_res(marbles.resT2.logbin$asd, metals.marbles.T2, IQRs.mT2)
 marbles.ntd.T2.poi <- extract_res(marbles.resT2.logbin$ntd, metals.marbles.T2, IQRs.mT2)
@@ -1284,6 +1185,7 @@ marbles.ntd.T2.poi <- extract_res(marbles.resT2.logbin$ntd, metals.marbles.T2, I
 marbles.asd.T3.poi <- extract_res(marbles.resT3.logbin$asd, metals.marbles.T3, IQRs.mT3)
 marbles.ntd.T3.poi <- extract_res(marbles.resT3.logbin$ntd, metals.marbles.T3, IQRs.mT3)
 ```
+
 
 
 # forest plot
@@ -1452,6 +1354,7 @@ matblood$fam <- substr(matblood$src_subject_id,1,5)
 
 pd <- metals.earli.T2 %>% filter(Analyte.Code=="Cadmium")
 table(pd$fam %in% matblood$fam)
+table(matblood$fam %in% pd$fam)
 
 pd$cd_bl <- matblood[match(pd$fam, matblood$fam), "bcd"]
 pd$cd_lod <- matblood[match(pd$fam, matblood$fam), "bcd_below_lod"]
@@ -1512,9 +1415,10 @@ export2word(blood.word, file=file.path(path,'Tables/EARLI_blood_desc_tab.docx'))
 ### fit models
 
 
-pd.asd = pd %>% filter(asd %in% c('TD','ASD'))
+pd.asd = blood.descriptives %>% filter(asd %in% c('TD','ASD'))
 pd.asd$asd = factor(pd.asd$asd)
-pd.ntd = pd %>% filter(asd %in% c('TD','Non-TD'))
+pd.asd$coi_gender <- factor(pd.asd$coi_gender)
+pd.ntd = blood.descriptives %>% filter(asd %in% c('TD','Non-TD'))
 pd.ntd$asd = factor(pd.ntd$asd)
 
 
@@ -1529,25 +1433,43 @@ table(pd.ntd$asd, !is.na(pd.ntd$cd_bl))
 table(pd.asd$asd, !is.na(pd.asd$mn_bl))
 table(pd.ntd$asd, !is.na(pd.ntd$mn_bl))
 
-blood.asd = glm(asd ~ cd_bl + MomEdu + coi_gender + maternal_age + GA_deliv_wks, data=pd.asd, family=binomial(link="logit"))
-blood.ntd = glm(asd ~ cd_bl + MomEdu + coi_gender + maternal_age + GA_deliv_wks, data=pd.ntd, family=binomial(link="logit"))
+cd.glm = glm(asd ~ cd_bl + MomEdu + coi_gender + maternal_age + GA_deliv_wks, data=pd.asd, family=binomial(link="logit"))
+# blood.ntd = glm(asd ~ cd_bl + MomEdu + coi_gender + maternal_age + GA_deliv_wks, data=pd.ntd, family=binomial(link="logit"))
 
+cd.glml = glm(asd ~ cd_bl + coi_gender + maternal_age + GA_deliv_wks, data=pd.asd, family=binomial(link="log"), maxit=10000000, start=c(log()))
+
+cd.logbin = logbin(asd ~ cd_bl + MomEdu + coi_gender, data=pd.asd, maxit=10000000)
+
+cd.logbin = logbin(asd ~ cd_bl + MomEdu + coi_gender + maternal_age + GA_deliv_wks, data=pd.asd, bound.tol=1e-20, epsilon=1e-30, maxit=10000000)
+
+cd.glm = glm(asd ~ cd_bl + MomEdu + coi_gender + maternal_age + GA_deliv_wks, data=pd.asd, family=binomial)
+cd.logbin = probratio(cd.glm, scale='log', method='delta')
+
+
+fit.ntd = logbin(asd ~ cd_bl + MomEdu + coi_gender + maternal_age + GA_deliv_wks, data=pd.ntd, bound.tol=1e-20, epsilon=1e-30, maxit=10000000)
 
 ### fit models
 
 bl.metals <- list(cd="cd_bl", pb="pb_bl", mn="mn_bl", se="se_bl", thg="thg_bl")
 
 blood.asd <- lapply(bl.metals, FUN=function(x){
-  pd.asd[,x] <- log(pd.asd[,x],2)
-  glm(paste0('asd ~ ', x, ' + MomEdu + coi_gender + maternal_age + GA_deliv_wks') %>% formula(), 
-      data=pd.asd, family=binomial(link="logit")) %>%
-    summary()
+  # logbin(paste0('asd ~ ', x, ' + MomEdu + coi_gender + maternal_age + GA_deliv_wks') %>% formula(), 
+  #     data=pd.asd, bound.tol=1e-20, epsilon=1e-30, maxit=10000000) %>%
+  #   summary()
+  mod.glm = glm(paste0('asd ~ ', x, ' + MomEdu + coi_gender + maternal_age + GA_deliv_wks') 
+                %>% formula(), 
+               data=pd.asd, family=binomial)
+  probratio(mod.glm, scale='log', method='delta')
 })
 
 blood.ntd <- lapply(bl.metals, FUN=function(x){
-  glm(paste0('asd ~ ', x, ' + MomEdu + coi_gender + maternal_age + GA_deliv_wks') %>% formula(), 
-      data=pd.ntd, family=binomial(link="logit")) %>%
-    summary()
+  # logbin(paste0('asd ~ ', x, ' + MomEdu + coi_gender + maternal_age + GA_deliv_wks') %>% formula(), 
+  #     data=pd.ntd, bound.tol=1e-20, epsilon=1e-30, maxit=10000000) %>%
+  #   summary()
+  mod.glm = glm(paste0('asd ~ ', x, ' + MomEdu + coi_gender + maternal_age + GA_deliv_wks') 
+                %>% formula(), 
+               data=pd.ntd, family=binomial)
+  probratio(mod.glm, scale='log', method='delta')
 })
 
 ### forest plot
@@ -1560,8 +1482,8 @@ grab_values <- function(summ){
     IQR(pd[,x], na.rm=T)
   })
   
-  OR = lapply(summ, FUN=function(x){x$coefficients[2,1]}) %>% unlist
-  err = lapply(summ, FUN=function(x){x$coefficients[2,2]}) %>% unlist
+  OR = lapply(summ, FUN=function(x){x[1,1]}) %>% unlist
+  err = lapply(summ, FUN=function(x){x[1,2]}) %>% unlist
   OR = OR * blood.IQR
   lower = OR - 1.96*blood.IQR*err
   upper = OR + 1.96*blood.IQR*err
@@ -1598,6 +1520,11 @@ forest.blood.ntd <- ggplot(data=blood.ntd.CI, aes(x=metals, y=OR, ymin=lower, ym
 forest.blood.asd
 forest.blood.ntd
 
+
+ggplot(pd.asd, aes(x=asd, y=cd_bl)) +
+  geom_boxplot()
+ggplot(pd.ntd, aes(x=asd, y=cd_bl)) +
+  geom_boxplot()
 ```
 
 
