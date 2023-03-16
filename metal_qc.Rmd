@@ -1,0 +1,342 @@
+---
+title: "EARLI_MARBLES_URINE_METALS"
+author: "John Dou"
+date: "February 27, 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r lib}
+library(openxlsx)
+library(readxl)
+library(dplyr)
+library(ggplot2)
+```
+
+Read in data
+```{r load}
+path <- "K:/My Drive/Urine_Metals/Metals QC"
+urine.metals <- read.xlsx(file.path(path,"J-00331817 BA-190703-3 JHU Metals in Urine final.xlsx"))
+
+spc.grav <- read.xlsx(file.path(path,"J-00366017 BA-200610-1 JHU SpG Final.xlsx"), sheet=2)
+saveRDS(spc.grav, file=file.path(path,"../Metals ASD/Data/spgrav.rds"))
+```
+
+Assign cohort labels, family ID
+```{r fam}
+setwd(path)
+earli <- read.csv(file.path(path,"/../urine_draft_pull_list.csv"))
+marbles <- read_excel(file.path(path,"/../KBakulski Urines N458 MANTIS #5392 BOX INVENTORY.xls")) %>% data.frame
+
+table(urine.metals$SID %in% earli$Sample_ID)
+# FALSE  TRUE
+# 9570  7920
+table(urine.metals$SID %in% marbles$IBC)
+# FALSE  TRUE
+# 7920  9570
+
+
+#which cohort
+urine.metals$cohort <- ifelse(urine.metals$SID %in% earli$Sample_ID, 'EARLI', 'MARBLES')
+
+
+#prep fam id
+earli.fam <- earli[,c('Family_ID')]
+names(earli.fam) <- earli$Sample_ID
+marbles.fam <- substr(marbles$COI_ID, 1, 4)
+names(marbles.fam) <- marbles$IBC
+fam <- c(earli.fam,marbles.fam)
+
+urine.metals$fam <- fam[as.character(urine.metals$SID)]
+
+
+#COI_ID in pull list
+marbles.coi <- marbles$COI_ID
+names(marbles.coi) <- marbles$IBC
+urine.metals$child_id <- ifelse(urine.metals$cohort=='MARBLES', marbles.coi[as.character(urine.metals$SID)] , NA)
+
+earli.coi <- earli$Subject_ID
+names(earli.coi) <- earli$Sample_ID
+urine.metals$child_id <- ifelse(urine.metals$cohort=="EARLI", earli.coi[as.character(urine.metals$SID)] , urine.metals$child_id)
+
+#does above code correctly?
+table((urine.metals$cohort=='EARLI' & urine.metals$SID %in% earli$Sample_ID) | (urine.metals$cohort=='MARBLES' & urine.metals$SID %in% marbles$IBC))
+# TRUE
+# 17490
+# yey
+
+
+#cohort counting
+cohort.count <- unique(urine.metals[,c('fam','cohort')])
+table(cohort.count$cohort)
+
+
+marb <- urine.metals %>% filter(cohort=='MARBLES')
+marb.count <- unique(marb$child_id)
+length(marb.count)
+
+```
+
+Timepoint during pregnancy
+```{r time}
+earli <- earli[!duplicated(earli$Sample_ID),]
+marbles <- marbles[!duplicated(marbles$IBC),]
+
+table(marbles$fw_timepoint)
+# cTrim2 dTrim3
+# 178    255
+table(earli$DCC_Visit)
+# Enrollment Clinic Visit  Home Visit (2nd Trimster)
+# 174                         26
+# Home Visit (3rd Trimester)
+# 160
+
+#harmonize timepoint, then merge into urine metals dataframe
+time.earli <- earli[,c('Sample_ID','DCC_Visit')]
+time.marbles <- marbles[,c('IBC','fw_timepoint')] %>% data.frame
+colnames(time.earli) <- c('SID','Time')
+colnames(time.marbles) <- c('SID','Time')
+time.earli$Time <- ifelse(time.earli$Time=='Enrollment Clinic Visit', 'T1', ifelse(time.earli$Time=='Home Visit (2nd Trimster)', 'T2', 'T3'))
+time.marbles$Time <- ifelse(time.marbles$Time=='cTrim2', 'T2', 'T3')
+time <- rbind(time.earli,time.marbles)
+rownames(time) <- as.character(time$SID)
+
+urine.metals$Time <- time[as.character(urine.metals$SID), 'Time']
+
+#check to make sure counts match
+check <- urine.metals[!duplicated(urine.metals$SID),] 
+table(check$Time)
+```
+
+How many above LOD
+```{r LOD}
+
+### overall above LOD
+metal.qc <- urine.metals %>% group_by(Analyte.Code) %>% 
+  summarize(mean=mean(Concentration), above_lod=sum(Concentration>LOD), n=n(), pct_over_LOD=round(above_lod/n*100,1)) %>%
+  data.frame()
+
+### above LOD by cohort
+metal.qc <- urine.metals %>% group_by(Analyte.Code, cohort) %>% 
+  summarize(mean=mean(Concentration), sd=sd(Concentration), above_lod=sum(Concentration>LOD), n=n(), pct_over_LOD=round(above_lod/n*100,1)) %>%
+  data.frame()
+
+
+### above LOD and distributions by timepoint
+metal.qc.time <- urine.metals %>% group_by(Analyte.Code, cohort, Time) %>% 
+  summarize(mean=mean(Concentration), sd=sd(Concentration), above_lod=sum(Concentration>LOD), n=n(), pct_over_LOD=round(above_lod/n*100,1)) %>%
+  data.frame()
+
+metal.qc.timesimp <- urine.metals %>% group_by(Analyte.Code, Time) %>% 
+  summarize(mean=mean(Concentration), sd=sd(Concentration), above_lod=sum(Concentration>LOD), n=n(), pct_over_LOD=round(above_lod/n*100,1)) %>%
+  data.frame()
+
+### histograms of distribution
+metals <- unique(urine.metals$Analyte.Code)
+
+pdf('urine_metals_distributions.pdf')
+for(metal in metals){
+  sub <- urine.metals %>% filter(Analyte.Code==metal)
+  p1 <- ggplot(sub, aes(x=Concentration, fill=cohort)) +
+    geom_histogram(alpha=0.6, position='identity') +
+    theme_bw() +
+    ggtitle(metal)
+  p2 <- ggplot(sub, aes(x=Concentration, fill=Time)) +
+    geom_histogram(alpha=0.6, position='identity') +
+    theme_bw() +
+    ggtitle(metal)
+  print(p1)
+  print(p2)
+}
+dev.off()
+
+
+
+
+```
+
+
+Correlation
+```{r corr}
+library(corrplot)
+
+reduce.metal <- urine.metals[,c('SID','Analyte.Code','Concentration')]
+wide.metal <- reshape(reduce.metal, idvar='SID', timevar='Analyte.Code', times='Concentration', direction='wide')
+
+M <- cor(wide.metal[,-1])
+rownames(M) <- gsub('Concentration.','',rownames(M))
+colnames(M) <- gsub('Concentration.','',colnames(M))
+
+pdf('F:/Drive/Misc/Urine-Samp/Metals QC/corrplot_metals.pdf', width=20, height=20)
+  corrplot(M, method='ellipse', type='upper', addCoef.col='black')
+dev.off()
+
+```
+
+
+Examine by RunID
+```{r runid}
+#runID distributions
+pdf('urine_metals_distributions_runID.pdf')
+for(metal in metals){
+  sub <- urine.metals %>% filter(Analyte.Code==metal)
+  p1 <- ggplot(sub, aes(x=Concentration, fill=RunID)) +
+    geom_histogram(alpha=0.6, position='identity') +
+    theme_bw() +
+    ggtitle(metal)
+  print(p1)
+}
+dev.off()
+
+cohort_x_run <- table(urine.metals$cohort, urine.metals$RunID)
+time_x_run <- table(urine.metals$Time, urine.metals$RunID)
+
+pdf('violin_run.pdf')
+for(metal in metals){
+  urine.metals$run <- factor(urine.metals$RunID) %>% as.numeric %>% factor
+  sub <- urine.metals %>% filter(Analyte.Code==metal)
+  p <- ggplot(sub, aes(x=run, y=Concentration, col=cohort)) +
+    geom_violin() +
+    ggtitle(metal)
+  print(p)
+}
+dev.off()
+
+Antimony <- urine.metals %>% filter(Analyte.Code=='Antimony')
+table(Antimony$LOD, Antimony$RunID)
+
+Cadmium <- urine.metals %>% filter(Analyte.Code=='Cadmium')
+table(Cadmium$LOD, Cadmium$RunID)
+
+
+```
+
+
+Examine extreme values
+```{r tabs}
+#standardized values
+urine.metals.Z <- urine.metals %>% group_by(Analyte.Code) %>%
+  mutate(Z=(Concentration-mean(Concentration))/sd(Concentration)) %>% data.frame
+
+
+urine.metals[urine.metals$Analyte.Code=='Arsenic' & urine.metals$Concentration>2000,]
+# SID 2030184
+
+table(urine.metals.Z$Z>3, urine.metals.Z$Analyte.Code)
+table(urine.metals.Z$Z>5, urine.metals.Z$Analyte.Code, urine.metals.Z$cohort)
+urine.metals.Z[abs(urine.metals.Z$Z)>5,c('SID','Analyte.Code','Concentration','Z')]
+
+pdf('outlier_Z_histogram.pdf')
+for(met in metals){
+  sub = urine.metals.Z %>% filter(Analyte.Code==met)
+  p = ggplot(sub, aes(x=Z)) +
+    geom_histogram() +
+    ggtitle(met)
+  print(p)
+}
+dev.off()
+
+```
+
+
+Write tables, save
+```{r tabs}
+write.csv(metal.qc, file='over_LOD_cohort.csv', row.names = F)
+write.csv(metal.qc.time, file='over_LOD_cohort_time.csv', row.names = F)
+write.csv(metal.qc.timesimp, file='over_LOD_time.csv', row.names = F)
+
+write.csv(cohort_x_run, file='cohort_by_run.csv')
+write.csv(time_x_run, file='time_by_run.csv')
+
+saveRDS(urine.metals.Z, file=file.path(path,'urine_metals.RDS'))
+write.csv(urine.metals.Z, file=file.path(path,'urine_metals.csv'))
+```
+
+
+CDC blood measuers
+```{r blood}
+blood <- read.csv(file.path(path,'../../../CDC_Measures/Metals-CDC.csv'))
+head(blood)
+ids <- read.csv(file.path(path,'../../../CDC_Measures/ids.csv'))
+head(ids)
+
+table(blood$External.ID %in% ids$Sample_ID)
+
+#limit to those with both urine and blood measures
+blood$famid <- ids[match(blood$External.ID,ids$Sample_ID),'Family_ID']
+table(blood$famid %in% urine.metals$fam)
+
+
+common <- intersect(blood$famid,urine.metals$fam)
+
+blood.com <- blood %>% filter(famid %in% common)
+urine.com <- urine.metals.Z %>% filter(fam %in% common)
+
+#select time point for urine measures
+urine.only <- urine.com %>% group_by(Analyte.Code, fam) %>% filter(n()==1)
+urine.multi <- urine.com %>% group_by(Analyte.Code, fam) %>% filter(n()==2)
+urine.1 <- urine.multi %>% group_by(Analyte.Code, fam) %>% filter(Time==min(Time))
+urine.2 <- urine.multi %>% group_by(Analyte.Code, fam) %>% filter(Time==max(Time))
+
+table(urine.only$Time)
+table(urine.1$Time)
+table(urine.2$Time)
+
+urine.comp <- rbind(urine.only, urine.1)
+
+urine.Pb <- urine.comp %>% filter(Analyte.Code=='Lead')
+urine.Pb <- urine.Pb[match(blood.com$famid, urine.Pb$fam),]
+
+urine.Mn <- urine.comp %>% filter(Analyte.Code=='Manganese')
+urine.Mn <- urine.Mn[match(blood.com$famid, urine.Mn$fam),]
+
+urine.Se <- urine.comp %>% filter(Analyte.Code=='Selenium')
+urine.Se <- urine.Se[match(blood.com$famid, urine.Se$fam),]
+
+urine.Cd <- urine.comp %>% filter(Analyte.Code=='Cadmium')
+urine.Cd <- urine.Cd[match(blood.com$famid, urine.Cd$fam),]
+
+urine.Hg <- urine.comp %>% filter(Analyte.Code=='Mercury')
+urine.Hg <- urine.Hg[match(blood.com$famid, urine.Hg$fam),]
+
+#correlations
+#table(blood.com$BPB)
+blood.com$BPB <- ifelse(blood.com$BPB==-12, NA, blood.com$BPB)
+cor(blood.com$BPB, urine.Pb$Concentration, use='complete.obs')
+plot(blood.com$BPB, urine.Pb$Concentration, main=paste0('r=',round(cor(blood.com$BPB, urine.Pb$Concentration, use='complete.obs'),2)),
+     xlab='Blood Pb (ug/dL)', ylab='Urine Pb (ppb)')
+
+
+#table(blood.com$BMN)
+blood.com$BMN <- ifelse(blood.com$BMN==-12, NA, blood.com$BMN)
+cor(blood.com$BMN, urine.Mn$Concentration, use='complete.obs')
+plot(blood.com$BMN, urine.Mn$Concentration, main=paste0('r=',round(cor(blood.com$BMN, urine.Mn$Concentration, use='complete.obs'),2)),
+     xlab='Blood Mn (ug/L)', ylab='Urine Mn (ppb)')
+
+
+#table(blood.com$BSE)
+blood.com$BSE <- ifelse(blood.com$BSE==-12, NA, blood.com$BSE)
+cor(blood.com$BSE, urine.Se$Concentration, use='complete.obs')
+plot(blood.com$BSE, urine.Se$Concentration, main=paste0('r=',round(cor(blood.com$BSE, urine.Se$Concentration, use='complete.obs'),2)),
+     xlab='Blood Se (ug/L)', ylab='Urine Se (ppb)')
+
+
+#table(blood.com$BCD)
+blood.com$BCD <- ifelse(blood.com$BCD==-12, NA, ifelse(blood.com$BCD==-37, 0.1/sqrt(2),blood.com$BCD))
+cor(blood.com$BCD, urine.Cd$Concentration, use='complete.obs')
+plot(blood.com$BCD, urine.Cd$Concentration, main=paste0('r=',round(cor(blood.com$BCD, urine.Cd$Concentration, use='complete.obs'),2)),
+     xlab='Blood Cd (ug/L)', ylab='Urine Cd (ppb)')
+
+
+#table(blood.com$THG)
+blood.com$THG <- ifelse(blood.com$THG==-12, NA, ifelse(blood.com$THG==-37, 0.28/sqrt(2),blood.com$THG))
+cor(blood.com$THG, urine.Hg$Concentration, use='complete.obs')
+plot(blood.com$THG, urine.Hg$Concentration, main=paste0('r=',round(cor(blood.com$THG, urine.Hg$Concentration, use='complete.obs'),2)),
+     xlab='Blood Hg (ug/L)', ylab='Urine Hg (ppb)')
+
+
+```
