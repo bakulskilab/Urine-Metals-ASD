@@ -25,10 +25,10 @@ library(here)
 # urine.metals <- readRDS(file=file.path(here(),'Data/urine_metals.RDS'))
 # spec.grav <- readRDS(file=file.path(here(),'Data/spgrav.rds'))
 
-urine.metals <- read.csv(file.path(here(), "Data/urine_metals.csv"), header=T)
+urine.metals <- read.csv(file.path(here(), "../Data/urine_metals.csv"), header=T)
 
-marbearl <- read.sas7bdat(file=file.path(here(),'Data/e_m_covars_v5_20191115.sas7bdat'))
-marb.cov <- read.sas7bdat(file=file.path(here(),'Data/marbles_allcov_09mar20.sas7bdat'))
+marbearl <- read.sas7bdat(file=file.path(here(),'../Data/e_m_covars_v5_20191115.sas7bdat'))
+marb.cov <- read.sas7bdat(file=file.path(here(),'../Data/marbles_allcov_09mar20.sas7bdat'))
 
 metals <- unique(urine.metals$Analyte.Code)
 metals <- as.list(metals)
@@ -40,7 +40,7 @@ names(metals) <- unlist(metals)
 
 ```{r}
 #specific gravity adjusted values
-pdf(file.path(path,'Plots/urine_metals_distributions_sg.pdf'))
+pdf(file.path(path,'../Plots/urine_metals_distributions_sg.pdf'))
 for(metal in metals){
   sub <- urine.metals %>% filter(Analyte.Code==metal)
   p1 <- ggplot(sub, aes(x=Concentration_sg, fill=cohort)) +
@@ -52,7 +52,7 @@ for(metal in metals){
 dev.off()
 
 #log specific gravity adjusted values
-pdf(file.path(path,'Plots/urine_metals_distributions_sg_log_imp.pdf'))
+pdf(file.path(path,'../Plots/urine_metals_distributions_sg_log_imp.pdf'))
 for(metal in metals){
   sub <- urine.metals %>% filter(Analyte.Code==metal)
   p1 <- ggplot(sub, aes(x=Concentration_imp_sg_log2, fill=cohort)) +
@@ -418,7 +418,7 @@ ggplot(earli.last.scree, aes(x=PC, y=Standard.deviation)) +
 ```
 
 ```{r}
-pdf(file.path(path,'Plots/metal_correlation_earliT_early.pdf'))
+pdf(file.path(here(),'../Plots/metal_correlation_earliT_early.pdf'))
   ggplot(pcv.earli.metal, aes(x=PC1, y=PC2, label=c('Sb','As','Ba','Cd','Cs','Cr','Co','Cu','Pb','Mn','Hg','Mo','Ni','Se','Tl','Sn','Zn'))) +
     geom_point() +
     geom_text_repel() +
@@ -457,7 +457,7 @@ ggplot(pc.mat.long, aes(PC, Metal)) +
 M.e <- cor(wide.earli, method='spearman', use='pairwise.complete.obs')
 Ml.e <- cor(wide.earli.last, method='spearman', use='pairwise.complete.obs')
 
-pdf(file.path(path,'Plots/EARLI_metal_correlation.pdf'), height=14, width=14)
+pdf(file.path(here(),'../Plots/EARLI_metal_correlation.pdf'), height=14, width=14)
   corrplot(M.e, method='ellipse', type='upper', addCoef.col='black')
   corrplot(Ml.e, method='ellipse', type='upper', addCoef.col='black')
 dev.off()
@@ -465,7 +465,7 @@ dev.off()
 
 ```{r EARLI descriptives}
 ### sample characteristics
-earl.cov <- read.csv(paste0(path,"/Data Extraction Codebook 20150203_export_20150203_1422987480_wide_20150204_1423070501.csv"))
+earl.cov <- read.csv(file.path(here(),"../Data Extraction Codebook 20150203_export_20150203_1422987480_wide_20150204_1423070501.csv"))
 
 get_covars <- function(samps, pc){
   samples <- samps[,c('SID','fam','asd')] %>% unique()
@@ -532,8 +532,8 @@ gather_descriptives <- function(pd){
 tab.earli.T2 <- gather_descriptives(metals.earli.T2)
 tab.earli.T3 <- gather_descriptives(metals.earli.T3)
 
-export2word(tab.earli.T2, file=file.path(path,'Tables/EARLI_early_table1.docx'))
-export2word(tab.earli.T3, file=file.path(path,'Tables/EARLI_late_table1.docx'))
+export2word(tab.earli.T2, file=file.path(here(),'../Tables/EARLI_early_table1.docx'))
+export2word(tab.earli.T3, file=file.path(here(),'../Tables/EARLI_late_table1.docx'))
 
 
 # ### covariate landscape relationships
@@ -612,7 +612,7 @@ export2word(tab.earli.T3, file=file.path(path,'Tables/EARLI_late_table1.docx'))
 
 
 ### bivariate tests
-lod_percents <- read.csv(file.path(path,"../Metals QC/over_LOD_cohort.csv"))
+lod_percents <- read.csv(file.path(here(),"../../Metals QC/over_LOD_cohort.csv"))
 lod.earli <- lod_percents[lod_percents$cohort=='EARLI',]
 lod.earli$mod <- ifelse(lod.earli$pct_over_LOD>70, 'continuous', 'binary')
 mod.type <- lod.earli$mod
@@ -626,7 +626,7 @@ IQRs.T3 <- metals.earli.T3 %>% group_by(Analyte.Code) %>% summarize(IQR(Concentr
 IQRs.T3 <- IQRs.T3[,2]
 names(IQRs.T3) <- metals
 
-pdf(file.path(path,"Plots/earli_firstT_violin.pdf"))
+pdf(file.path(here(),"../Plots/earli_firstT_violin.pdf"))
 for(met in metals){
   p1 = ggplot(metals.earli.T2 %>% filter(Analyte.Code==met), aes(x=factor(asd), y=Concentration_sg)) +
   geom_violin() +geom_jitter(shape=16, position=position_jitter(0.2)) +
@@ -837,7 +837,7 @@ pc.marbles.last.metal <- prcomp(t(wide.marbles.last))
 pcv.marbles.last.metal <- data.frame(pc.marbles.last.metal$x)
 screeplot(pc.marbles.last.metal)
 
-pdf(file.path(path,'Plots/metal_correlation_marblesT_early.pdf'))
+pdf(file.path(here(),'../Plots/metal_correlation_marblesT_early.pdf'))
   ggplot(pcv.marbles.metal, aes(x=PC1, y=PC2, label=c('Sb','As','Ba','Cd','Cs','Cr','Co','Cu','Pb','Mn','Hg','Mo','Ni','Se','Tl','Sn','Zn'))) +
     geom_point() +
     geom_text_repel() +
@@ -878,7 +878,7 @@ ggplot(pc.mat.long, aes(PC, Metal)) +
 M.m <- cor(wide.marbles, method='spearman', use='pairwise.complete.obs')
 Ml.m <- cor(wide.marbles.last, method='spearman', use='pairwise.complete.obs')
 
-pdf(file.path(path,'Plots/MARBLES_metal_correlation.pdf'), height=14, width=14)
+pdf(file.path(here(),'../Plots/MARBLES_metal_correlation.pdf'), height=14, width=14)
   corrplot(M.m, method='ellipse', type='upper', addCoef.col='black')
   corrplot(Ml.m, method='ellipse', type='upper', addCoef.col='black')
 dev.off()
@@ -963,8 +963,8 @@ T3.summ <- rbind(earli.T3.summ[,c(1,9,2:8)], marbles.T3.summ[,c(1,9,2:8)])
 T2.summ <- T2.summ[order(T2.summ$Analyte.Code, T2.summ$cohort), ]
 T3.summ <- T3.summ[order(T3.summ$Analyte.Code, T3.summ$cohort), ]
 
-write.csv(T2.summ, file=paste0(path,"/Tables/metal_descriptives_T2.csv"), row.names=F, quote=F)
-write.csv(T3.summ, file=paste0(path,"/Tables/metal_descriptives_T3.csv"), row.names=F, quote=F)
+write.csv(T2.summ, file=file.path(here(),"../Tables/metal_descriptives_T2.csv"), row.names=F, quote=F)
+write.csv(T3.summ, file=file.path(here(),"../Tables/metal_descriptives_T3.csv"), row.names=F, quote=F)
 
 
 ### descriptive tables
@@ -1027,7 +1027,7 @@ IQRs.mT3 <- metals.marbles.T3 %>% group_by(Analyte.Code) %>% summarize(IQR(Conce
 IQRs.mT3 <- IQRs.mT3[,2]
 names(IQRs.mT3) <- metals
 
-pdf(file.path(path,"Plots/marbles_firstT_violin.pdf"))
+pdf(file.path(here(),"../Plots/marbles_firstT_violin.pdf"))
 for(met in metals){
   p = ggplot(metals.marbles.T2 %>% filter(Analyte.Code==met), aes(x=factor(asd), y=Concentration_sg)) +
   geom_violin() +geom_jitter(shape=16, position=position_jitter(0.2)) +
@@ -1140,7 +1140,7 @@ write.csv(outliers, file=file.path(path,'Tables/outliers_excluded_count.csv'), r
 ```{r models}
 
 #save(metals.earli.T2, metals.earli.T3, metals.marbles.T2, metals.marbles.T3, mod.type, metals, IQRs.T2, IQRs.T3, IQRs.mT2, IQRs.mT3, file=file.path(path,'Data/dat_for_models.RDA'))
-# load(file.path(path,'Data/dat_for_models.RDA'))
+load(file.path(here(),'../Data/dat_for_models.RDA'))
 
 model_fit_logbin <- function(pd, logistic=F){
   asd.res <- list()
@@ -1207,6 +1207,88 @@ earli.resT2.logistic <- model_fit_logbin(metals.earli.T2, logistic=T)
 earli.resT3.logistic <- model_fit_logbin(metals.earli.T3, logistic=T)
 marbles.resT2.logistic <- model_fit_logbin(metals.marbles.T2, logistic=T)
 marbles.resT3.logistic <- model_fit_logbin(metals.marbles.T3, logistic=T)
+```
+
+cadmium lod exploration
+```{r}
+
+cadmium.earli <- metals.earli.T2 %>% filter(Analyte.Code=="Cadmium")
+cadmium.earli$overLOD <- cadmium.earli$Concentration > cadmium.earli$LOD
+cadmium.earli$overLOD2 <- cadmium.earli$Concentration > 0.12
+
+table(cadmium.earli$asd, cadmium.earli$overLOD)
+table(cadmium.earli$asd, cadmium.earli$overLOD2)
+table(cadmium.earli$asd, cadmium.earli$LOD)
+table(cadmium.earli$asd, cadmium.earli$LOD) %>% prop.table
+
+
+lod06 <- cadmium.earli %>% filter(LOD==0.06)
+lod12 <- cadmium.earli %>% filter(LOD==0.12)
+summary(lod06$Concentration)
+summary(lod12$Concentration)
+
+cadmium.earli$over20 <- cadmium.earli$Concentration > 0.21
+table(cadmium.earli$asd, cadmium.earli$over20)
+
+cadmium.earli$LOD <- as.factor(cadmium.earli$LOD)
+
+ 
+asd = cadmium.earli %>% filter(asd %in% c('TD','ASD'))
+asd$asd = ifelse(asd$asd=='TD',0,1)
+ntd = cadmium.earli %>% filter(asd %in% c('TD','Non-TD'))
+ntd$asd = ifelse(ntd$asd=='TD',0,1)
+
+fit.asdglm = glm(asd ~ LOD + MomEdu + coi_gender + maternal_age + GA_deliv_wks, 
+               data=asd, family=binomial)
+fit.asd = probratio(fit.asdglm, scale='log', method='delta')
+        
+fit.ntdglm = glm(asd ~ LOD + MomEdu + coi_gender + maternal_age + GA_deliv_wks, 
+                 data=ntd, family=binomial)
+fit.ntd = probratio(fit.ntdglm, scale='log', method='delta')
+
+
+fit.asd
+fit.ntd
+```
+```{r}
+
+cadmium.marbles <- metals.marbles.T2 %>% filter(Analyte.Code=="Cadmium")
+cadmium.marbles$overLOD <- cadmium.marbles$Concentration > cadmium.marbles$LOD
+cadmium.marbles$overLOD2 <- cadmium.marbles$Concentration > 0.12
+
+table(cadmium.marbles$asd, cadmium.marbles$overLOD)
+table(cadmium.marbles$asd, cadmium.marbles$overLOD2)
+table(cadmium.marbles$asd, cadmium.marbles$LOD)
+table(cadmium.marbles$asd, cadmium.marbles$LOD) %>% prop.table
+
+
+lod06 <- cadmium.marbles %>% filter(LOD==0.06)
+lod12 <- cadmium.marbles %>% filter(LOD==0.12)
+summary(lod06$Concentration)
+summary(lod12$Concentration)
+
+cadmium.marbles$over20 <- cadmium.marbles$Concentration > 0.21
+table(cadmium.marbles$asd, cadmium.marbles$over20)
+
+cadmium.marbles$LOD <- as.factor(cadmium.marbles$LOD)
+
+ 
+asd = cadmium.marbles %>% filter(asd %in% c('TD','ASD'))
+asd$asd = ifelse(asd$asd=='TD',0,1)
+ntd = cadmium.marbles %>% filter(asd %in% c('TD','Non-TD'))
+ntd$asd = ifelse(ntd$asd=='TD',0,1)
+
+fit.asdglm = glm(asd ~ LOD + MomEdu + coi_gender + maternal_age + GA_deliv_wks, 
+               data=asd, family=binomial)
+fit.asd = probratio(fit.asdglm, scale='log', method='delta')
+        
+fit.ntdglm = glm(asd ~ LOD + MomEdu + coi_gender + maternal_age + GA_deliv_wks, 
+                 data=ntd, family=binomial)
+fit.ntd = probratio(fit.ntdglm, scale='log', method='delta')
+
+
+fit.asd
+fit.ntd
 ```
 
 # Quartiles of ASD PGS subset
