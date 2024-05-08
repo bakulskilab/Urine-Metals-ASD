@@ -46,7 +46,7 @@ samps.marb <- samps.marb[!duplicated(samps.marb$ibc),]
 
 ```{r}
 #specific gravity adjusted values
-pdf(file.path(path,'../Plots/urine_metals_distributions_sg.pdf'))
+pdf(file.path(here(),'../Plots/urine_metals_distributions_sg.pdf'))
 for(metal in metals){
   sub <- urine.metals %>% filter(Analyte.Code==metal)
   p1 <- ggplot(sub, aes(x=Concentration_sg, fill=cohort)) +
@@ -58,7 +58,7 @@ for(metal in metals){
 dev.off()
 
 #log specific gravity adjusted values
-pdf(file.path(path,'../Plots/urine_metals_distributions_sg_log_imp.pdf'))
+pdf(file.path(here(),'../Plots/urine_metals_distributions_sg_log_imp.pdf'))
 for(metal in metals){
   sub <- urine.metals %>% filter(Analyte.Code==metal)
   p1 <- ggplot(sub, aes(x=Concentration_imp_sg_log2, fill=cohort)) +
@@ -82,6 +82,14 @@ table(samples$fam %in% marbearl$famid)
  #  TRUE 
  #   791
 
+##### counting
+e.count <- samples %>% filter(cohort=='EARLI')
+length(unique(e.count$child_id))
+
+m.count <- samples %>% filter(cohort=='MARBLES')
+length(unique(m.count$child_id))
+#####
+
 marbearl.metal <- marbearl[marbearl$famid %in% samples$fam, ]
 
 multiple <- marbearl.metal[duplicated(marbearl.metal$famid) | duplicated(marbearl.metal$famid, fromLast=T),]
@@ -98,14 +106,28 @@ multi.birth.m <- multiple[multiple$project=='MARBLES',c('project','coi_id','fami
   group_by(famid) %>% filter(min(n_pregs) == max(n_pregs))
 multi.birth.e <- multiple[multiple$project=='EARLI',c('coi_id','famid','n_pregs','Dx_alg','BirthMonth','BirthYear')] %>%
   group_by(famid) %>% filter(min(n_pregs) == max(n_pregs))
-length(multi.birth.e) #6
-length(multi.birth.m) #7
+nrow(multi.birth.e) #14
+nrow(multi.birth.m) #10
 multi.birth <- c(unique(as.character(multi.birth.m$famid)), unique(as.character(multi.birth.e$famid)))
 marbearl.metal <- marbearl.metal[!marbearl.metal$famid %in% multi.birth,]
 
 urine.nomulti <- urine.metals[!urine.metals$fam %in% multi.birth, ]
-length(unique(urine.nomuti$SID)) #791
-length(unique(urine.nomulti$SID)) #768
+length(unique(urine.metals$SID)) #791
+length(unique(urine.nomulti$SID)) #771
+
+##### counting
+urine.multi <- urine.metals[urine.metals$fam %in% multi.birth, ] %>% filter(Analyte.Code=="Lead")
+
+e.count <- urine.multi %>% filter(cohort=='EARLI')
+length(unique(e.count$child_id)) #7
+nrow(e.count) #12
+
+m.count <- urine.multi %>% filter(cohort=='MARBLES')
+length(unique(m.count$child_id)) #5
+nrow(m.count) #8
+#####
+
+
 #ASD outcomet
 urine.nomulti$asd <- ifelse(urine.nomulti$cohort=='MARBLES',
                             marbearl.metal[match(urine.nomulti$child_id, marbearl.metal$coi_id),'Dx_alg'] , 
@@ -132,7 +154,22 @@ urine.nomulti$GA_collect <- ifelse(urine.nomulti$cohort=="EARLI",
                                    samps.marb[match(urine.nomulti$SID, samps.marb$ibc), "GA_sample_weeks"])
 
 ### zero GA incorrect, drop (3 samples)
+who.missGA <- urine.nomulti %>% filter(GA_collect == 0)
 urine.nomulti <- urine.nomulti %>% filter(GA_collect != 0)
+
+##### counting
+e.count <- urine.nomulti %>% filter(cohort=='EARLI') %>% filter(Analyte.Code=='Lead')
+length(unique(e.count$child_id)) #180
+nrow(e.count) #345
+
+who.missGA <- who.missGA %>% filter(Analyte.Code=="Lead")
+who.missGA$child_id %in% e.count$child_id
+
+m.count <- urine.nomulti %>% filter(cohort=='MARBLES') %>% filter(Analyte.Code=='Lead')
+length(unique(m.count$child_id)) #262
+nrow(m.count) #423
+#####
+
 ```
 
 
@@ -210,6 +247,40 @@ metals.earli.last <- rbind(metals.earli.last, metals.earli.last.addon)
 
 summary(metals.earli$GA_collect)
 summary(metals.earli.last$GA_collect)
+
+unique(metals.earli$child_id) %>% length()
+#173
+unique(metals.earli.last$child_id)  %>% length()
+#172
+
+
+### no overlap GA range
+
+# get for those with two samples
+fams.two <- unique(earli.two$fam)
+
+pick <- lapply(fams.two, FUN=function(f){
+  urine.earli %>% filter(fam==f) %>% filter(GA_collect < 28 & GA_collect == min(GA_collect))
+})
+
+pick.last <- lapply(fams.two, FUN=function(f){
+  urine.earli %>% filter(fam==f) %>% filter(GA_collect >= 28 & GA_collect == max(GA_collect))
+})
+
+metals.earli.strict <- do.call(rbind, pick)
+metals.earli.last.strict <- do.call(rbind, pick.last)
+metals.earli.strict <- rbind(metals.earli.strict, metals.earli.addon)
+metals.earli.last.strict <- rbind(metals.earli.last.strict, metals.earli.last.addon)
+
+unique(metals.earli.strict$child_id) %>% length()
+#161
+unique(metals.earli.last.strict$child_id)  %>% length()
+#162
+
+metals.earli.strict <- metals.earli %>% filter(GA_collect < 28)
+metals.earli.last.strict <- metals.earli.last %>% filter(GA_collect >= 28)
+unique(metals.earli.strict$child_id) %>% length() #161
+unique(metals.earli.last.strict$child_id) %>% length() #162
 ```
 
 ```{r earli pc corr}
@@ -245,6 +316,8 @@ pdf(file.path(here(),'../Plots/EARLI_metal_correlation.pdf'), height=14, width=1
   corrplot(Ml.e, method='ellipse', type='upper', addCoef.col='black')
 dev.off()
 ```
+
+
 ```{r EARLI descriptives}
 ### sample characteristics
 earl.cov <- read.csv(file.path(here(),"../Data Extraction Codebook 20150203_export_20150203_1422987480_wide_20150204_1423070501.csv"))
@@ -289,6 +362,25 @@ rounding <- function(x){
   x
 }
 
+### count missing
+metals.earli.T2$period <- 'early'
+metals.earli.T3$period <- 'late'
+count.emiss <- rbind(metals.earli.T2 %>% filter(Analyte.Code=="Lead"), metals.earli.T3 %>% filter(Analyte.Code=="Lead"))
+count.emiss <- count.emiss %>% filter(!duplicated(count.emiss$child_id))
+is.na(count.emiss$asd) %>% sum() #0
+is.na(count.emiss$MomEdu) %>% sum() #3
+is.na(count.emiss$coi_gender) %>% sum() #0
+is.na(count.emiss$maternal_age) %>% sum() #0
+is.na(count.emiss$GA_collect) %>% sum() #0
+
+count.emiss <- count.emiss %>% filter(!is.na(MomEdu))
+nrow(count.emiss) #177
+
+count.emiss2 <- rbind(metals.earli.T2 %>% filter(Analyte.Code=="Lead"), metals.earli.T3 %>% filter(Analyte.Code=="Lead")) %>% filter(!is.na(MomEdu))
+table(count.emiss2$period)
+# early  late 
+#   170   171
+nrow(count.emiss2) #341
 
 ### descriptive tables
 library(compareGroups)
@@ -550,6 +642,9 @@ drop.early <- check1 %>% filter(!child_id %in% keep.early$child_id)
 nrow(drop.early) + nrow(drop.late)
 
 # filtering after picking procedure
+count.presibfilter1 <- metals.marbles %>% filter(Analyte.Code=="Lead")
+count.presibfilter2 <- metals.marbles.last %>% filter(Analyte.Code=="Lead")
+
 metals.marbles <- metals.marbles %>% filter(!child_id %in% drop.early$child_id)
 metals.marbles.last <- metals.marbles.last %>% filter(!child_id %in% drop.late$child_id)
 
@@ -559,7 +654,32 @@ marbles.counting <- marbles.samples %>% group_by(child_id) %>% summarize(n = n()
 table(marbles.counting$n)
  # 1   2 
  # 97 154 
-```
+
+marbles.presamples <- rbind(count.presibfilter1, count.presibfilter2)
+marbles.precounting <- marbles.presamples %>% group_by(child_id) %>% summarize(n = n())
+table(marbles.precounting$n)
+#   1   2 
+# 101 161
+
+length(unique(marbles.presamples$child_id)) #262
+length(unique(marbles.samples$child_id)) #251
+
+length(unique(marbles.presamples$SID)) #423
+length(unique(marbles.samples$SID)) #405
+
+
+### no GA overlap
+
+metals.marbles.strict <- metals.marbles %>% filter(GA_collect < 28)
+metals.marbles.last.strict <- metals.marbles.last %>% filter(GA_collect >= 28)
+
+length(unique(metals.marbles$child_id)) #167
+length(unique(metals.marbles.strict$child_id)) #167
+
+length(unique(metals.marbles.last$child_id)) #238
+length(unique(metals.marbles.last.strict$child_id)) #238
+
+``` 
 
 ```{r marbles pc corr}
 # get wide data set
@@ -604,11 +724,11 @@ rownames(M.both) <- c('Sb', 'As', 'Ba', 'Cd', 'Cs', 'Cr', 'Co', 'Cu', 'Pb', 'Mn'
 colnames(Ml.both) <- c('Sb', 'As', 'Ba', 'Cd', 'Cs', 'Cr', 'Co', 'Cu', 'Pb', 'Mn', 'Hg', 'Mo', 'Ni', 'Se', 'Tl', 'Sn', 'Zn')
 rownames(Ml.both) <- c('Sb', 'As', 'Ba', 'Cd', 'Cs', 'Cr', 'Co', 'Cu', 'Pb', 'Mn', 'Hg', 'Mo', 'Ni', 'Se', 'Tl', 'Sn', 'Zn')
 
-svg(file.path(here(),'../Plots/metal_correlation_earlier.svg'), height=14, width=14)
-  corrplot(M.both, method='ellipse', addCoef.col='black', diag=F, tl.pos='d', tl.col='red', cl.pos='b', cl.cex=1.3, number.cex=1.4, tl.cex=2.5)
-  text(18, 8, "EARLI", cex=3,  srt=90)
-  text(0, 8, "MARBLES", cex=3, srt=90)
-  text(9, -1.8, "Spearman Correlation", cex=1.6)
+pdf(file.path(here(),'../Plots/metal_correlation_earlier.pdf'), height=7.5, width=7.5)
+  corrplot(M.both, method='ellipse', addCoef.col='black', diag=F, tl.pos='d', tl.col='red', cl.pos='b', cl.cex=0.9, number.cex=0.8, tl.cex=1.0)
+  text(18, 8, "EARLI", cex=2,  srt=90)
+  text(0, 8, "MARBLES", cex=2, srt=90)
+  text(9, -1.8, "Spearman Correlation", cex=1.1)
 dev.off()
 
 svg(file.path(here(),'../Plots/metal_correlation_later.svg'), height=14, width=14)
@@ -680,6 +800,27 @@ T3.summ <- T3.summ[order(T3.summ$Analyte.Code, T3.summ$cohort), ]
 
 write.csv(T2.summ, file=file.path(here(),"../Tables/metal_descriptives_T2.csv"), row.names=F, quote=F)
 write.csv(T3.summ, file=file.path(here(),"../Tables/metal_descriptives_T3.csv"), row.names=F, quote=F)
+
+
+### count missing
+metals.marbles.T2$period <- 'early'
+metals.marbles.T3$period <- 'late'
+count.mmiss <- rbind(metals.marbles.T2 %>% filter(Analyte.Code=="Lead"), metals.marbles.T3 %>% filter(Analyte.Code=="Lead"))
+count.mmiss <- count.mmiss %>% filter(!duplicated(count.mmiss$child_id))
+is.na(count.mmiss$asd) %>% sum() #11
+is.na(count.mmiss$MomEdu) %>% sum() #0
+is.na(count.mmiss$coi_gender) %>% sum() #0
+is.na(count.mmiss$maternal_age) %>% sum() #0
+is.na(count.mmiss$GA_collect) %>% sum() #0
+
+count.mmiss <- count.mmiss %>% filter(!is.na(asd))
+nrow(count.mmiss) #240
+
+count.mmiss2 <- rbind(metals.marbles.T2 %>% filter(Analyte.Code=="Lead"), metals.marbles.T3 %>% filter(Analyte.Code=="Lead")) %>% filter(!is.na(asd))
+table(count.mmiss2$period)
+# early  late 
+#   158   231 
+nrow(count.mmiss2) #389
 
 
 ### descriptive tables

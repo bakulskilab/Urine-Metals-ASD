@@ -23,26 +23,452 @@ library(here)
 load(file.path(here(),'../Data/dat_for_models_20Sept2023.RDA'))
 ```
 
-# Plot gestational ages
+# Strict cutoffs for timepoints (T1/T2 and T3)
 ```{r}
-earli.full <- rbind(metals.earli.T2, metals.earli.T3)
-marbles.full <- rbind(metals.marbles.T2, metals.marbles.T3)
+# before and after EARLI
+metals.earli.T2$child_id %>% unique() %>% length()
+#173
+metals.earli.T3$child_id %>% unique() %>% length()
+#172
 
-earli.full %>% filter(Analyte.Code=="Lead")
-marbles.full %>% filter(Analyte.Code=="Lead")
+metals.earli.T2.strict <- metals.earli.T2 %>% filter(GA_collect < 28)
+metals.earli.T3.strict <- metals.earli.T3 %>% filter(GA_collect >= 28)
+metals.earli.T2.strict$child_id %>% unique() %>% length()
+#161
+metals.earli.T3.strict$child_id %>% unique() %>% length()
+#162
 
-ggplot(earli.full, aes(x=GA_collect, col=Time)) +
-  geom_density() +
-  theme_classic() + xlim(0,40) +
-  ylab("") + xlab("Gestational Age at Urine Collection")
 
-ggplot(marbles.full, aes(x=GA_collect, col=Time)) +
-  geom_density() +
-  theme_classic() + xlim(0,40) + 
-  ylab("") + xlab("Gestational Age at Urine Collection")
+# before and after MARBLES
+metals.marbles.T2$child_id %>% unique() %>% length()
+#167
+metals.marbles.T3$child_id %>% unique() %>% length()
+#238
 
+metals.marbles.T2.strict <- metals.marbles.T2 %>% filter(GA_collect < 28)
+metals.marbles.T3.strict <- metals.marbles.T3 %>% filter(GA_collect >= 28)
+metals.marbles.T2.strict$child_id %>% unique() %>% length()
+#167
+metals.marbles.T3.strict$child_id %>% unique() %>% length()
+#238
+
+
+# rename time variable 
+metals.earli.T2.strict$Time <- "T1/T2"
+metals.earli.T3.strict$Time <- "T3"
+metals.marbles.T2.strict$Time <- "T1/T2"
+metals.marbles.T3.strict$Time <- "T3"
+
+earli.full <- rbind(metals.earli.T2.strict, metals.earli.T3.strict)
+marbles.full <- rbind(metals.marbles.T2.strict, metals.marbles.T3.strict)
+
+earli.full <- earli.full %>% filter(Analyte.Code=="Lead")
+marbles.full <- marbles.full %>% filter(Analyte.Code=="Lead")
+
+earli.full$Time <- factor(earli.full$Time)
+marbles.full$Time <- factor(marbles.full$Time)
 
 ```
+
+# Plot gestational ages
+```{r}
+# EARLI
+ggplot(earli.full, aes(x=GA_collect, fill=Time)) +
+  geom_histogram(data = earli.full %>% filter(Time=='T1/T2'),
+                 alpha=0.9, boundary=0, binwidth=1, closed='left', position="identity") +
+  geom_histogram(data = earli.full %>% filter(Time=='T3'),
+                 alpha=0.9, boundary=0, binwidth=1, closed='left', position="identity") +
+  theme_classic() + xlim(0,40) + geom_vline(xintercept = c(28)) +
+  ylab("") + xlab("Gestational Age at Urine Collection") +
+  guides(fill=guide_legend(title="Trimester"))
+
+
+# MARBLES
+ggplot(marbles.full, aes(x=GA_collect, fill=Time)) +
+  geom_histogram(data = marbles.full %>% filter(Time=='T1/T2'),
+                 alpha=0.9, boundary=0, binwidth=1, closed='left', position="identity") +
+  geom_histogram(data = marbles.full %>% filter(Time=='T3'),
+                 alpha=0.9, boundary=0, binwidth=1, closed='left', position="identity") +
+  theme_classic() + xlim(0,40) + geom_vline(xintercept = c(28)) +
+  ylab("") + xlab("Gestational Age at Urine Collection") +
+  guides(fill=guide_legend(title="Trimester"))
+```
+
+
+# Additional Variables
+```{r}
+library(sas7bdat)
+
+E_augment <- read.csv("G:/My Drive/EARLI MARBLES Cross Compare/EARLI_mdsAncestry.csv")
+covars <- read.sas7bdat("G:/My Drive/EARLI MARBLES Cross Compare/e_m_covars_v9_15aug23.sas7bdat")
+
+# table(earli.full$coi_id %in% covars$COI_ID)
+# table(marbles.full$child_id %in% covars$COI_ID)
+# 
+# table(covars %>% filter(COI_ID %in% earli.full$coi_id) %>% select(MomRaceEth), exclude=NULL)
+# 
+# table(covars %>% filter(COI_ID %in% marbles.full$child_id) %>% select(MomRaceEth), exclude=NULL)
+
+E_augment_select <- E_augment %>% filter(IID  %in% earli.full$child_id)
+# table(E_augment_select$classification.PCA, E_augment_select$race.questionnaire, exclude=NULL)
+
+# merge in race eth
+metals.earli.T2.strict$MomRaceEth <- covars[match(metals.earli.T2.strict$coi_id, covars$COI_ID), "MomRaceEth"]
+metals.earli.T3.strict$MomRaceEth <- covars[match(metals.earli.T3.strict$coi_id, covars$COI_ID), "MomRaceEth"]
+metals.marbles.T2.strict$MomRaceEth <- covars[match(metals.marbles.T2.strict$child_id, covars$COI_ID), "MomRaceEth"]
+metals.marbles.T3.strict$MomRaceEth <- covars[match(metals.marbles.T3.strict$child_id, covars$COI_ID), "MomRaceEth"]
+
+re_categorize <- function(dat){
+  dat$MomRaceEth <- case_when(
+    dat$MomRaceEth == 1 ~ 'White',
+    dat$MomRaceEth == 2 ~ 'Black',
+    dat$MomRaceEth %in% c(4,5) ~ 'Asian or Pacific Islander',
+    dat$MomRaceEth %in% c(6,7) ~ 'Hispanic',
+    .default = 'Other/Multiracial'
+  )
+}
+
+metals.earli.T2.strict$MomRaceEth <- re_categorize(metals.earli.T2.strict)
+metals.earli.T3.strict$MomRaceEth <- re_categorize(metals.earli.T3.strict)
+metals.marbles.T2.strict$MomRaceEth <- re_categorize(metals.marbles.T2.strict)
+metals.marbles.T3.strict$MomRaceEth <- re_categorize(metals.marbles.T3.strict)
+
+# metals.earli.T2.strict %>% filter(Analyte.Code=='Lead') %>% select(MomRaceEth) %>% table
+# metals.earli.T3.strict %>% filter(Analyte.Code=='Lead') %>% select(MomRaceEth) %>% table
+# metals.marbles.T2.strict %>% filter(Analyte.Code=='Lead') %>% select(MomRaceEth) %>% table
+# metals.marbles.T3.strict %>% filter(Analyte.Code=='Lead') %>% select(MomRaceEth) %>% table
+
+
+#smoking exclude
+# table(earli.full$Time, earli.full$preg_smoke, exclude=NULL)
+  #       0   1 <NA>
+  # T1/T2 117   7   37
+  # T3    126   5   31
+# table(marbles.full$Time, marbles.full$preg_smoke, exclude=NULL)
+  #         0   1 NaN
+  # T1/T2 151   7   9
+  # T3    213   9  16
+ 
+metals.earli.T2.strict <- metals.earli.T2.strict %>% filter(is.na(preg_smoke) | preg_smoke!=1)
+metals.earli.T3.strict <- metals.earli.T3.strict %>% filter(is.na(preg_smoke) | preg_smoke!=1) 
+metals.marbles.T2.strict <- metals.marbles.T2.strict %>% filter(is.na(preg_smoke) | preg_smoke!=1)
+metals.marbles.T3.strict <- metals.marbles.T3.strict %>% filter(is.na(preg_smoke) | preg_smoke!=1) 
+```
+
+# Revised Tables
+
+### Table 1
+```{r}
+library(gt)
+library(gtsummary)
+
+fisher_sim_p <- function(data, variable, by, ...) {
+  result <- list()
+  result$p <- stats::fisher.test(x = data %>% pull({{variable}}), y = data %>% pull({{by}}), simulate.p.value = T)$p.value
+  result$test <- "Fisher's test with simulated p-value"
+  result
+}
+
+earli.T2 <- metals.earli.T2.strict %>% filter(Analyte.Code=="Lead")
+earli.T3 <- metals.earli.T3.strict %>% filter(Analyte.Code=="Lead")
+marbles.T2 <- metals.marbles.T2.strict %>% filter(Analyte.Code=="Lead")
+marbles.T3 <- metals.marbles.T3.strict %>% filter(Analyte.Code=="Lead")
+
+rownames(earli.T2) <- earli.T2$child_id
+rownames(earli.T3) <- earli.T3$child_id
+rownames(marbles.T2) <- marbles.T2$child_id
+rownames(marbles.T3) <- marbles.T3$child_id
+
+
+### individual cohort/time
+
+earli.T2 <- earli.T2 %>% select(child_id, asd, MomEdu , maternal_age, MomRaceEth, 
+                          coi_gender, GA_collect)
+earli.T2 <- na.omit(earli.T2)
+earli.T2$MomEdu <- ifelse(earli.T2$MomEdu, "College Degree", "No Degree")
+restab.eT2 <- tbl_summary(earli.T2 %>% select(asd, MomEdu , maternal_age, MomRaceEth, 
+                          coi_gender, GA_collect),
+                        by=asd,
+                        digits=list(
+                          all_continuous() ~ c(2,1)
+                        ),
+                        statistic = list(
+                          all_continuous() ~ "{mean} ({sd})",
+                          all_categorical() ~ "{n} ({p}%)"),
+                        label=list(MomEdu~"Education",
+                                   MomRaceEth~"Self Report Race/Ethnicity",
+                                   maternal_age~"Age",
+                                   coi_gender~"Infant Sex",
+                                   GA_collect~"Gestational Age at Sample Collection")
+                      ) %>% add_p(test=list(MomRaceEth ~ "fisher_sim_p"))
+
+earli.T3 <- earli.T3 %>% select(child_id, asd, MomEdu , maternal_age, MomRaceEth, 
+                          coi_gender, GA_collect)
+earli.T3 <- na.omit(earli.T3)
+earli.T3$MomEdu <- ifelse(earli.T3$MomEdu, "College Degree", "No Degree")
+restab.eT3 <- tbl_summary(earli.T3 %>% select(asd, MomEdu , maternal_age, MomRaceEth, 
+                          coi_gender, GA_collect),
+                        by=asd,
+                        digits=list(
+                          all_continuous() ~ c(2,1)
+                        ),
+                        statistic = list(
+                          all_continuous() ~ "{mean} ({sd})",
+                          all_categorical() ~ "{n} ({p}%)"),
+                        label=list(MomEdu~"Education",
+                                   MomRaceEth~"Self Report Race/Ethnicity",
+                                   maternal_age~"Age",
+                                   coi_gender~"Infant Sex",
+                                   GA_collect~"Gestational Age at Sample Collection")
+                      ) %>% add_p(test=list(MomRaceEth ~ "fisher_sim_p"))
+
+marbles.T2 <- marbles.T2 %>% select(child_id, asd, MomEdu , maternal_age, MomRaceEth, 
+                          coi_gender, GA_collect)
+marbles.T2 <- na.omit(marbles.T2)
+marbles.T2$MomEdu <- ifelse(marbles.T2$MomEdu, "College Degree", "No Degree")
+restab.mT2 <- tbl_summary(marbles.T2 %>% select(asd, MomEdu , maternal_age, MomRaceEth, 
+                          coi_gender, GA_collect),
+                        by=asd,
+                        digits=list(
+                          all_continuous() ~ c(2,1)
+                        ),
+                        statistic = list(
+                          all_continuous() ~ "{mean} ({sd})",
+                          all_categorical() ~ "{n} ({p}%)"),
+                        label=list(MomEdu~"Education",
+                                   MomRaceEth~"Self Report Race/Ethnicity",
+                                   maternal_age~"Age",
+                                   coi_gender~"Infant Sex",
+                                   GA_collect~"Gestational Age at Sample Collection")
+                      ) %>% add_p(test=list(MomRaceEth ~ "fisher_sim_p"))
+
+marbles.T3 <- marbles.T3 %>% select(child_id, asd, MomEdu , maternal_age, MomRaceEth, 
+                          coi_gender, GA_collect)
+marbles.T3 <- na.omit(marbles.T3)
+marbles.T3$MomEdu <- ifelse(marbles.T3$MomEdu, "College Degree", "No Degree")
+restab.mT3 <- tbl_summary(marbles.T3 %>% select(asd, MomEdu , maternal_age, MomRaceEth, 
+                          coi_gender, GA_collect),
+                        by=asd,
+                        digits=list(
+                          all_continuous() ~ c(2,1)
+                        ),
+                        statistic = list(
+                          all_continuous() ~ "{mean} ({sd})",
+                          all_categorical() ~ "{n} ({p}%)"),
+                        label=list(MomEdu~"Education",
+                                   MomRaceEth~"Self Report Race/Ethnicity",
+                                   maternal_age~"Age",
+                                   coi_gender~"Infant Sex",
+                                   GA_collect~"Gestational Age at Sample Collection")
+                      ) %>% add_p(test=list(MomRaceEth ~ "fisher_sim_p"))
+
+
+restab.eT2 %>% as_flex_table() %>% 
+  flextable::save_as_docx(path=file.path(here(),'../Tables/Revised/EARLI_T2.docx'))
+restab.eT3 %>% as_flex_table() %>% 
+  flextable::save_as_docx(path=file.path(here(),'../Tables/Revised/EARLI_T3.docx'))
+restab.mT2 %>% as_flex_table() %>% 
+  flextable::save_as_docx(path=file.path(here(),'../Tables/Revised/MARBLES_T2.docx'))
+restab.mT3 %>% as_flex_table() %>% 
+  flextable::save_as_docx(path=file.path(here(),'../Tables/Revised/MARBLES_T3.docx'))
+
+### combined
+
+earli.T2$samp <- rownames(earli.T2)
+earli.T3$samp <- rownames(earli.T3)
+earli.T2$cohort <- "EARLI"
+earli.T3$cohort <- "EARLI"
+
+marbles.T2$samp <- rownames(marbles.T2)
+marbles.T3$samp <- rownames(marbles.T3)
+marbles.T2$cohort <- "MARBLES"
+marbles.T3$cohort <- "MARBLES"
+
+earli.ind <- rbind(earli.T2, earli.T3)
+earli.ind <- earli.ind %>% filter(!duplicated(samp))
+
+marbles.ind <- rbind(marbles.T2, marbles.T3)
+marbles.ind <- marbles.ind %>% filter(!duplicated(samp))
+
+earli.ind$GA_T2 <- earli.T2[match(earli.ind$child_id, earli.T2$child_id),"GA_collect"]
+earli.ind$GA_T3 <- earli.T3[match(earli.ind$child_id, earli.T3$child_id),"GA_collect"]
+
+marbles.ind$GA_T2 <- marbles.T2[match(marbles.ind$child_id, marbles.T2$child_id),"GA_collect"]
+marbles.ind$GA_T3 <- marbles.T3[match(marbles.ind$child_id, marbles.T3$child_id),"GA_collect"]
+
+restab.E <- tbl_summary(earli.ind %>% select(asd, MomEdu , maternal_age, MomRaceEth, 
+                          coi_gender, GA_T2, GA_T3),
+                        by=asd,
+                        digits=list(
+                          all_continuous() ~ c(2,1)
+                        ),
+                        statistic = list(
+                          all_continuous() ~ "{mean} ({sd})",
+                          all_categorical() ~ "{n} ({p}%)"),
+                        label=list(MomEdu~"Education",
+                                   MomRaceEth~"Self Report Race/Ethnicity",
+                                   maternal_age~"Age",
+                                   coi_gender~"Infant Sex")
+                      ) %>% add_p(test=list(MomRaceEth ~ "fisher_sim_p"))
+
+restab.E %>% as_flex_table() %>% 
+  flextable::save_as_docx(path=file.path(here(),'../Tables/Revised/EARLI.docx'))
+
+
+restab.M <- tbl_summary(marbles.ind %>% select(asd, MomEdu , maternal_age, MomRaceEth, 
+                          coi_gender, GA_T2, GA_T3),
+                        by=asd,
+                        digits=list(
+                          all_continuous() ~ c(2,1)
+                        ),
+                        statistic = list(
+                          all_continuous() ~ "{mean} ({sd})",
+                          all_categorical() ~ "{n} ({p}%)"),
+                        label=list(MomEdu~"Education",
+                                   MomRaceEth~"Self Report Race/Ethnicity",
+                                   maternal_age~"Age",
+                                   coi_gender~"Infant Sex")
+                      ) %>% add_p(test=list(MomRaceEth ~ "fisher_sim_p"))
+
+restab.M %>% as_flex_table() %>% 
+  flextable::save_as_docx(path=file.path(here(),'../Tables/Revised/MARBLES.docx'))
+
+### accounting 
+
+nrow(earli.T2)
+nrow(earli.T3)
+
+nrow(marbles.T2)
+nrow(marbles.T3)
+
+table(c(rownames(earli.T2), rownames(earli.T3))) %>% table()
+
+table(c(rownames(marbles.T2), rownames(marbles.T3))) %>% table()
+```
+
+### Supp Table 1
+
+```{r}
+urine.all <- rbind(metals.earli.T2.strict %>% select(Analyte.Code, Concentration, cohort, LOD, Time), 
+                   metals.earli.T3.strict %>% select(Analyte.Code, Concentration, cohort, LOD, Time), 
+                   metals.marbles.T2.strict %>% select(Analyte.Code, Concentration, cohort, LOD, Time), 
+                   metals.marbles.T3.strict %>% select(Analyte.Code, Concentration, cohort, LOD, Time))
+
+LOD.descriptives <- urine.all %>% group_by(Analyte.Code, cohort, LOD, Time) %>% 
+  summarize(n=n(), above_lod=sum(Concentration>LOD), 
+            pct_over_LOD=round(above_lod/n*100,1)) %>%
+  data.frame()
+head(LOD.descriptives)
+
+
+write.csv(LOD.descriptives, file=file.path(here(),'../Tables/Revised/LOD_descriptives.csv'), row.names = F)
+
+```
+
+### Supp Table 2
+
+```{r}
+out.et2 <- metals.earli.T2.strict %>% group_by(Analyte.Code) %>% summarize(sum(is.na(Concentration_imp_sg_log2)))
+out.et3 <- metals.earli.T3.strict %>% group_by(Analyte.Code) %>% summarize(sum(is.na(Concentration_imp_sg_log2)))
+out.mt2 <- metals.marbles.T2.strict %>% group_by(Analyte.Code) %>% summarize(sum(is.na(Concentration_imp_sg_log2)))
+out.mt3 <- metals.marbles.T3.strict %>% group_by(Analyte.Code) %>% summarize(sum(is.na(Concentration_imp_sg_log2)))
+
+outliers <- cbind(out.et2, out.et3[,2], out.mt2[,2], out.mt3[,2])
+colnames(outliers) <- c('Metal', 'EARLI_TE', 'EARLI_TL', 'MARBLES_TE', 'MARBLES_TL')
+write.csv(outliers, file=file.path(here(),'../Tables/Revised/outliers_excluded_count.csv'), row.names=F, quote=F)
+```
+
+
+### Supp Table 3 and 4
+
+```{r}
+urine.metals <- read.csv(file.path(here(), "../Data/urine_metals.csv"), header=T)
+
+rounding <- function(x){
+  x$mean <- signif(x$mean, 3)
+  x$sd <- signif(x$sd, 3)
+  x$median <- signif(x$median, 3)
+  x$IQR <- signif(x$IQR, 3)
+  
+  x
+}
+
+earli.T2.summ <- urine.metals %>% filter(SID %in% metals.earli.T2.strict$SID) %>% group_by(Analyte.Code) %>%
+  summarize(mean=mean(Concentration_sg, na.rm=T), sd=sd(Concentration_sg, na.rm=T), median=median(Concentration_sg, na.rm=T),
+            IQR=IQR(Concentration_sg, na.rm=T), n=n(),  above_lod=sum(Concentration>LOD, na.rm=T), pct_over_LOD=round(above_lod/n*100,1)) %>% data.frame()
+
+earli.T3.summ <- urine.metals %>% filter(SID %in% metals.earli.T3.strict$SID) %>% group_by(Analyte.Code) %>%
+  summarize(mean=mean(Concentration_sg, na.rm=T), sd=sd(Concentration_sg, na.rm=T), median=median(Concentration_sg, na.rm=T),
+            IQR=IQR(Concentration_sg, na.rm=T), n=n(),  above_lod=sum(Concentration>LOD, na.rm=T), pct_over_LOD=round(above_lod/n*100,1)) %>% data.frame()
+
+
+marbles.T2.summ <- urine.metals %>% filter(SID %in% metals.marbles.T2.strict$SID) %>% group_by(Analyte.Code) %>%
+  summarize(mean=mean(Concentration_sg, na.rm=T), sd=sd(Concentration_sg, na.rm=T), median=median(Concentration_sg, na.rm=T),
+            IQR=IQR(Concentration_sg, na.rm=T), n=n(),  above_lod=sum(Concentration>LOD, na.rm=T), pct_over_LOD=round(above_lod/n*100,1)) %>% data.frame()
+
+marbles.T3.summ <- urine.metals %>% filter(SID %in% metals.marbles.T3.strict$SID) %>% group_by(Analyte.Code) %>%
+  summarize(mean=mean(Concentration_sg, na.rm=T), sd=sd(Concentration_sg, na.rm=T), median=median(Concentration_sg, na.rm=T),
+            IQR=IQR(Concentration_sg, na.rm=T), n=n(),  above_lod=sum(Concentration>LOD, na.rm=T), pct_over_LOD=round(above_lod/n*100,1)) %>% data.frame()
+
+earli.T2.summ <- rounding(earli.T2.summ)
+earli.T3.summ <- rounding(earli.T3.summ)
+marbles.T2.summ <- rounding(marbles.T2.summ)
+marbles.T3.summ <- rounding(marbles.T3.summ)
+
+earli.T2.summ$cohort <- 'EARLI'
+earli.T3.summ$cohort <- 'EARLI'
+marbles.T2.summ$cohort <- 'MARBLES'
+marbles.T3.summ$cohort <- 'MARBLES'
+
+earli.T2.summ$Time <- 'T1/T2'
+earli.T3.summ$Time <- 'T3'
+marbles.T2.summ$Time <- 'T1/T2'
+marbles.T3.summ$Time <- 'T3'
+
+
+T2.summ <- rbind(earli.T2.summ[,c(1,9,2:8)], marbles.T2.summ[,c(1,9,2:8)])
+T3.summ <- rbind(earli.T3.summ[,c(1,9,2:8)], marbles.T3.summ[,c(1,9,2:8)])
+
+T2.summ <- T2.summ[order(T2.summ$Analyte.Code, T2.summ$cohort), ]
+T3.summ <- T3.summ[order(T3.summ$Analyte.Code, T3.summ$cohort), ]
+
+T2.summ
+T3.summ
+
+write.csv(T2.summ, file=file.path(here(),"../Tables/Revised/metal_descriptives_T2.csv"), row.names=F, quote=F)
+write.csv(T3.summ, file=file.path(here(),"../Tables/Revised/metal_descriptives_T3.csv"), row.names=F, quote=F)
+
+```
+### Supp Table 5
+
+```{r}
+time.cors <- sapply(metals, FUN=function(x){
+  ET2 = metals.earli.T2.strict %>% filter(child_id %in% earli.T2$child_id & Analyte.Code==x)
+  ET3 = metals.earli.T3.strict %>% filter(child_id %in% earli.T3$child_id & Analyte.Code==x)
+  
+  MT2 = metals.marbles.T2.strict %>% filter(child_id %in% marbles.T2$child_id & Analyte.Code==x)
+  MT3 = metals.marbles.T3.strict %>% filter(child_id %in% marbles.T3$child_id & Analyte.Code==x)
+  
+  Eboth = intersect(ET2$child_id, ET3$child_id)
+  Mboth = intersect(MT2$child_id, MT3$child_id)
+  
+  ET2 = ET2[match(Eboth, ET2$child_id),]
+  ET3 = ET3[match(Eboth, ET3$child_id),]
+  
+  MT2 = MT2[match(Mboth, MT2$child_id),]
+  MT3 = MT3[match(Mboth, MT3$child_id),]
+  
+  E.corr = round(cor(ET2$Concentration, ET3$Concentration, 
+                                   use="complete.obs", method='spearman'),2)
+  M.corr = round(cor(MT2$Concentration, MT3$Concentration, 
+                                   use="complete.obs", method='spearman'),2)
+  data.frame(cbind(E.corr, M.corr))
+})
+
+write.csv(t(time.cors), file.path(here(),'../Tables/Revised/time_cor.csv'))
+```
+
+
 
 # Model Fitting and Meta Analysis Functions
 ```{r}
@@ -67,34 +493,34 @@ model_fit_logbin <- function(pd, logistic=F){
     
     if(mod.type[met] == 'continuous'){
       if(!logistic){
-        fit.asdglm = glm(asd ~ Concentration_imp_sg_log2 + MomEdu + coi_gender + maternal_age + GA_collect, 
+        fit.asdglm = glm(asd ~ Concentration_imp_sg_log2 + MomEdu + coi_gender + maternal_age + MomRaceEth + GA_collect, 
                data=asd, family=binomial)
         fit.asd = probratio(fit.asdglm, scale='log', method='delta')
         
-        fit.ntdglm = glm(asd ~ Concentration_imp_sg_log2 + MomEdu + coi_gender + maternal_age + GA_collect, 
+        fit.ntdglm = glm(asd ~ Concentration_imp_sg_log2 + MomEdu + coi_gender + maternal_age + MomRaceEth + GA_collect, 
                  data=ntd, family=binomial)
         fit.ntd = probratio(fit.ntdglm, scale='log', method='delta')
       }else{
-        fit.asd = glm(asd ~ Concentration_imp_sg_log2 + MomEdu + coi_gender + maternal_age + GA_collect,
+        fit.asd = glm(asd ~ Concentration_imp_sg_log2 + MomEdu + coi_gender + maternal_age + MomRaceEth + GA_collect,
                      data=asd, family=binomial)
-        fit.ntd = glm(asd ~ Concentration_imp_sg_log2 + MomEdu + coi_gender + maternal_age + GA_collect,
+        fit.ntd = glm(asd ~ Concentration_imp_sg_log2 + MomEdu + coi_gender + maternal_age + MomRaceEth + GA_collect,
                      data=ntd, family=binomial)
       }
     }else{
       asd$overLOD <- asd$Concentration > asd$LOD
       ntd$overLOD <- ntd$Concentration > ntd$LOD
       if(!logistic){
-        fit.asdglm = glm(asd ~ overLOD + MomEdu + coi_gender + maternal_age + GA_collect, 
+        fit.asdglm = glm(asd ~ overLOD + MomEdu + coi_gender + maternal_age + MomRaceEth + GA_collect, 
                data=asd, family=binomial)
         fit.asd = probratio(fit.asdglm, scale='log', method='delta')
         
-        fit.ntdglm = glm(asd ~ overLOD + MomEdu + coi_gender + maternal_age + GA_collect, 
+        fit.ntdglm = glm(asd ~ overLOD + MomEdu + coi_gender + maternal_age + MomRaceEth + GA_collect, 
                  data=ntd, family=binomial)
         fit.ntd = probratio(fit.ntdglm, scale='log', method='delta')
       }else{
-        fit.asd = glm(asd ~ overLOD + MomEdu + coi_gender + maternal_age + GA_collect,
+        fit.asd = glm(asd ~ overLOD + MomEdu + coi_gender + maternal_age + MomRaceEth + GA_collect,
                      data=asd, family=binomial)
-        fit.ntd = glm(asd ~ overLOD + MomEdu + coi_gender + maternal_age + GA_collect,
+        fit.ntd = glm(asd ~ overLOD + MomEdu + coi_gender + maternal_age + MomRaceEth + GA_collect,
                      data=ntd, family=binomial)
       }
     }
@@ -106,6 +532,64 @@ model_fit_logbin <- function(pd, logistic=F){
   return(list(asd=asd.res, ntd=ntd.res))
 }
 
+# fit models for ASD and NTD vs TD no covars
+# pd = dataframe with data
+# logistic = F to get risk ratio estimates
+# logistic = T to get odds ratio estimates
+model_fit_logbin_crude <- function(pd, logistic=F){
+  asd.res <- list()
+  ntd.res <- list()
+  
+  for(met in metals){
+    sub = pd %>% filter(Analyte.Code==met)
+  
+    asd = sub %>% filter(asd %in% c('TD','ASD'))
+    asd$asd = ifelse(asd$asd=='TD',0,1)
+    ntd = sub %>% filter(asd %in% c('TD','Non-TD'))
+    ntd$asd = ifelse(ntd$asd=='TD',0,1)
+
+    print(met)
+    
+    if(mod.type[met] == 'continuous'){
+      if(!logistic){
+        fit.asdglm = glm(asd ~ Concentration_imp_sg_log2, 
+               data=asd, family=binomial)
+        fit.asd = probratio(fit.asdglm, scale='log', method='delta')
+        
+        fit.ntdglm = glm(asd ~ Concentration_imp_sg_log2, 
+                 data=ntd, family=binomial)
+        fit.ntd = probratio(fit.ntdglm, scale='log', method='delta')
+      }else{
+        fit.asd = glm(asd ~ Concentration_imp_sg_log2,
+                     data=asd, family=binomial)
+        fit.ntd = glm(asd ~ Concentration_imp_sg_log2,
+                     data=ntd, family=binomial)
+      }
+    }else{
+      asd$overLOD <- asd$Concentration > asd$LOD
+      ntd$overLOD <- ntd$Concentration > ntd$LOD
+      if(!logistic){
+        fit.asdglm = glm(asd ~ overLOD, 
+               data=asd, family=binomial)
+        fit.asd = probratio(fit.asdglm, scale='log', method='delta')
+        
+        fit.ntdglm = glm(asd ~ overLOD, 
+                 data=ntd, family=binomial)
+        fit.ntd = probratio(fit.ntdglm, scale='log', method='delta')
+      }else{
+        fit.asd = glm(asd ~ overLOD,
+                     data=asd, family=binomial)
+        fit.ntd = glm(asd ~ overLOD,
+                     data=ntd, family=binomial)
+      }
+    }
+  
+    asd.res[[met]] <- fit.asd
+    ntd.res[[met]] <- fit.ntd
+  }
+  
+  return(list(asd=asd.res, ntd=ntd.res))
+}
 
 
 # get effect estimates, standard deviations, p-values from results
@@ -288,7 +772,26 @@ metals.b <- c('Antimony', "Cadmium", "Chromium", "Lead")
 
 # Model fitting
 
+```{r}
+metals.earli.T2 <- metals.earli.T2.strict
+metals.earli.T3 <- metals.earli.T3.strict
+metals.marbles.T2 <- metals.marbles.T2.strict
+metals.marbles.T3 <- metals.marbles.T3.strict
+
+metals.earli.T2$MomRaceEth <- ifelse(metals.earli.T2$MomRaceEth == "White", "White", "Non-White")
+metals.earli.T3$MomRaceEth <- ifelse(metals.earli.T3$MomRaceEth == "White", "White", "Non-White")
+metals.marbles.T2$MomRaceEth <- ifelse(metals.marbles.T2$MomRaceEth == "White", "White", "Non-White")
+metals.marbles.T3$MomRaceEth <- ifelse(metals.marbles.T3$MomRaceEth == "White", "White", "Non-White")
+```
+
 ```{r models}
+#| message: false
+
+earli.resT2.crude <- model_fit_logbin_crude(metals.earli.T2)
+earli.resT3.crude <- model_fit_logbin_crude(metals.earli.T3)
+marbles.resT2.crude <- model_fit_logbin_crude(metals.marbles.T2)
+marbles.resT3.crude <- model_fit_logbin_crude(metals.marbles.T3)
+
 earli.resT2.logbin <- model_fit_logbin(metals.earli.T2)
 earli.resT3.logbin <- model_fit_logbin(metals.earli.T3)
 marbles.resT2.logbin <- model_fit_logbin(metals.marbles.T2)
@@ -302,6 +805,22 @@ marbles.resT3.logistic <- model_fit_logbin(metals.marbles.T3, logistic=T)
 
 ```{r extract}
 #| message: false
+
+# crude models
+earli.asd.T2.crude <- extract_res(earli.resT2.crude$asd, metals.earli.T2)
+earli.ntd.T2.crude <- extract_res(earli.resT2.crude$ntd, metals.earli.T2)
+
+earli.asd.T3.crude <- extract_res(earli.resT3.crude$asd, metals.earli.T3)
+earli.ntd.T3.crude <- extract_res(earli.resT3.crude$ntd, metals.earli.T3)
+
+marbles.asd.T2.crude <- extract_res(marbles.resT2.crude$asd, metals.marbles.T2)
+marbles.ntd.T2.crude <- extract_res(marbles.resT2.crude$ntd, metals.marbles.T2)
+
+marbles.asd.T3.crude <- extract_res(marbles.resT3.crude$asd, metals.marbles.T3)
+marbles.ntd.T3.crude <- extract_res(marbles.resT3.crude$ntd, metals.marbles.T3)
+
+
+# main models
 earli.asd.T2.poi <- extract_res(earli.resT2.logbin$asd, metals.earli.T2)
 earli.ntd.T2.poi <- extract_res(earli.resT2.logbin$ntd, metals.earli.T2)
 
@@ -314,7 +833,7 @@ marbles.ntd.T2.poi <- extract_res(marbles.resT2.logbin$ntd, metals.marbles.T2)
 marbles.asd.T3.poi <- extract_res(marbles.resT3.logbin$asd, metals.marbles.T3)
 marbles.ntd.T3.poi <- extract_res(marbles.resT3.logbin$ntd, metals.marbles.T3)
 
-
+# logistic sensitivity
 earli.asd.T2.logistic <- extract_res(earli.resT2.logistic$asd, metals.earli.T2, logistic=T)
 earli.ntd.T2.logistic <- extract_res(earli.resT2.logistic$ntd, metals.earli.T2, logistic=T)
 
@@ -331,6 +850,19 @@ marbles.ntd.T3.logistic <- extract_res(marbles.resT3.logistic$ntd, metals.marble
 # forest plot
 
 ```{r forest}
+#crude
+res.earli.T2.asd.crude <- process_res(earli.asd.T2.crude, "EARLI", IQRs.T2)
+res.earli.T2.ntd.crude <- process_res(earli.ntd.T2.crude, "EARLI", IQRs.T2)
+
+res.earli.T3.asd.crude <- process_res(earli.asd.T3.crude, "EARLI", IQRs.T3)
+res.earli.T3.ntd.crude <- process_res(earli.ntd.T3.crude, "EARLI", IQRs.T3)
+
+res.marbles.T2.asd.crude <- process_res(marbles.asd.T2.crude, "MARBLES", IQRs.mT2)
+res.marbles.T2.ntd.crude <- process_res(marbles.ntd.T2.crude, "MARBLES", IQRs.mT2)
+
+res.marbles.T3.asd.crude <- process_res(marbles.asd.T3.crude, "MARBLES", IQRs.mT3)
+res.marbles.T3.ntd.crude <- process_res(marbles.ntd.T3.crude, "MARBLES", IQRs.mT3)
+
 #log reg
 res.earli.T2.asd.poi <- process_res(earli.asd.T2.poi, "EARLI", IQRs.T2)
 res.earli.T2.ntd.poi <- process_res(earli.ntd.T2.poi, "EARLI", IQRs.T2)
@@ -359,14 +891,22 @@ res.marbles.T3.ntd.logistic <- process_res(marbles.ntd.T3.logistic, "MARBLES", I
 
 
 ### group time/outcome 
+res.asdT2.crude <- binding(res.earli.T2.asd.crude, res.marbles.T2.asd.crude)
+res.asdT3.crude <- binding(res.earli.T3.asd.crude, res.marbles.T3.asd.crude)
+res.ntdT2.crude <- binding(res.earli.T2.ntd.crude, res.marbles.T2.ntd.crude)
+res.ntdT3.crude <- binding(res.earli.T3.ntd.crude, res.marbles.T3.ntd.crude)
+
+save(res.asdT2.crude, res.asdT3.crude, res.ntdT2.crude, res.ntdT3.crude,
+     file=file.path(here(),'/../Data/crude_results_Apr2024.RDA'))
+
+
 res.asdT2.poi <- binding(res.earli.T2.asd.poi, res.marbles.T2.asd.poi)
 res.asdT3.poi <- binding(res.earli.T3.asd.poi, res.marbles.T3.asd.poi)
 res.ntdT2.poi <- binding(res.earli.T2.ntd.poi, res.marbles.T2.ntd.poi)
 res.ntdT3.poi <- binding(res.earli.T3.ntd.poi, res.marbles.T3.ntd.poi)
 
 save(res.asdT2.poi, res.asdT3.poi, res.ntdT2.poi, res.ntdT3.poi,
-     file=file.path(here(),'/../Data/logbin_results_20Sept2023.RDA'))
-
+     file=file.path(here(),'/../Data/logbin_results_Apr2024.RDA'))
 
 
 res.asdT2.logit <- binding(res.earli.T2.asd.logistic, res.marbles.T2.asd.logistic)
@@ -375,56 +915,20 @@ res.ntdT2.logit <- binding(res.earli.T2.ntd.logistic, res.marbles.T2.ntd.logisti
 res.ntdT3.logit <- binding(res.earli.T3.ntd.logistic, res.marbles.T3.ntd.logistic)
 
 save(res.asdT2.logit, res.asdT3.logit, res.ntdT2.logit, res.ntdT3.logit,
-     file=paste0(here(),'/../Data/logistic_results_20Sept2023.RDA'))
-
-
-plot_bin_con <- function(res, what){
-  forest.bin <- ggplot(data=res%>%filter(model=='binary'), 
-                       aes(x=Analyte.Code, y=OR, ymin=lower, ymax=upper)) +
-    geom_pointrange(aes(col=Analyte.Code), position=position_dodge2(width=1), size=1.3) +
-    geom_hline(yintercept=1, linetype=2) +
-    facet_wrap(~cohort) +
-    theme_bw() +
-    theme(text = element_text(size=20),
-          legend.position = 'none') +
-    xlab('') + ylab('Odds Ratio') +
-    coord_flip()
-
-  forest.con <- ggplot(data=res%>%filter(model=='continuous'), 
-                       aes(x=Analyte.Code, y=OR, ymin=lower, ymax=upper)) +
-    geom_pointrange(aes(col=Analyte.Code), position=position_dodge2(width=1), size=1.3) +
-    geom_hline(yintercept=1, linetype=2) +
-    facet_wrap(~cohort) +
-    theme_bw() +
-    theme(text = element_text(size=20),
-          legend.position = 'none') +
-    xlab('') + ylab('Odds Ratio') +
-    coord_flip()
-  
-  ggsave(forest.bin, file=paste0(here(),'/../Plots/forest_bin_',what,'.svg'),height=4, width=10)
-  ggsave(forest.con, file=paste0(here(),'/../Plots/forest_con_',what,'.svg'),height=9, width=10)
-    
-  invisible()
-}
-
-plot_bin_con(res.asdT2.poi, 'asdT2')
-plot_bin_con(res.asdT3.poi, 'asdT3')
-
-plot_bin_con(res.ntdT2.poi, 'ntdT2')
-plot_bin_con(res.ntdT3.poi, 'ntdT3')
+     file=paste0(here(),'/../Data/logistic_results_Apr2024.RDA'))
 ```
 
 # Meta Analysis
 
-## log binomial
+## crude binomial
 ```{r}
-load(file=paste0(file.path(here(),'../Data/logbin_results_20Sept2023.RDA')))
+load(file=paste0(file.path(here(),'../Data/crude_results_20Sept2023.RDA')))
 #load(file=paste0(path,'Data/poisson_results.RDA'))
 
-res.asdT2 <- res.asdT2.poi
-res.asdT3 <- res.asdT3.poi
-res.ntdT2 <- res.ntdT2.poi
-res.ntdT3 <- res.ntdT3.poi
+res.asdT2 <- res.asdT2.crude
+res.asdT3 <- res.asdT3.crude
+res.ntdT2 <- res.ntdT2.crude
+res.ntdT3 <- res.ntdT3.crude
 
 metals <- unique(res.asdT2$Analyte.Code) %>% as.character
 
@@ -487,29 +991,29 @@ meta_plots_2T <-function(coefs, name){
   
   forest.bin <- ggplot(data=coefs[grepl(paste(metals.b, collapse='|'), coefs.asdT2$metal),], 
                        aes(x=lab, y=OR, ymin=OR.lower, ymax=OR.upper, alpha=alpha, shape=shape, col=I(col))) +
-    geom_pointrange(position=position_dodge2(width=1), size=1.3) +
+    geom_pointrange(position=position_dodge2(width=1), size=0.75) +
     geom_hline(yintercept=1, linetype=2) +
     theme_bw() + facet_grid(metal ~ time) +
-    theme(text = element_text(size=20), strip.text.y = element_text(angle=0)) +
+    theme(text = element_text(size=10), strip.text.y = element_text(angle=0)) +
     xlab('') + ylab('Risk Ratio') +
     coord_flip(ylim=c(0,4))
   
     forest.con1 <- ggplot(data=coefs[grepl(paste(metals.c1, collapse='|'), coefs.asdT2$metal),], 
                        aes(x=lab, y=OR, ymin=OR.lower, ymax=OR.upper, alpha=alpha, shape=shape, color=I(col))) +
-    geom_pointrange(position=position_dodge2(width=1), size=1.3) +
+    geom_pointrange(position=position_dodge2(width=1), size=0.75) +
     geom_hline(yintercept=1, linetype=2) +
     theme_bw() + facet_grid(metal ~ time) +
-    theme(text = element_text(size=20), strip.text.y = element_text(angle=0), 
+    theme(text = element_text(size=10), strip.text.y = element_text(angle=0), 
           legend.position = 'none') +
     xlab('') + ylab('Risk Ratio') +
     coord_flip(ylim=c(0.5,3))
     
     forest.con2 <- ggplot(data=coefs[grepl(paste(metals.c2, collapse='|'), coefs.asdT2$metal),], 
                        aes(x=lab, y=OR, ymin=OR.lower, ymax=OR.upper, alpha=alpha, shape=shape, color=I(col))) +
-    geom_pointrange(position=position_dodge2(width=1), size=1.3) +
+    geom_pointrange(position=position_dodge2(width=1), size=0.75) +
     geom_hline(yintercept=1, linetype=2) +
     theme_bw() + facet_grid(metal ~ time) +
-    theme(text = element_text(size=20), strip.text.y = element_text(angle=0),
+    theme(text = element_text(size=10), strip.text.y = element_text(angle=0),
           legend.position = 'none') +
     xlab('') + ylab('Risk Ratio') +
     coord_flip(ylim=c(0.5,3))
@@ -523,7 +1027,7 @@ meta_plots_2T <-function(coefs, name){
                             layout_matrix = rbind(c(4,1,1,4),
                                                   c(2,2,3,3)))
   
-  ggsave(combi.plot, file=paste0(here(),'/../Plots/meta/forest_2time_',name,'.svg'),height=10, width=16)
+  ggsave(combi.plot, file=paste0(here(),'/../Plots/meta/forest_2time_',name,'.svg'),height=7.5, width=7.5)
 }
 
 coefs.asdT2$time <- "Early"
@@ -534,11 +1038,11 @@ coefs.ntdT2$time <- "Early"
 coefs.ntdT3$time <- "Late"
 coefs.ntd <- rbind(coefs.ntdT2, coefs.ntdT3)
 
-meta_plots_2T(coefs.asd, "ASD_20Sept2023")
-meta_plots_2T(coefs.ntd, "NTD_20Sept2023")
+meta_plots_2T(coefs.asd, "Crude_18Oct2023")
+meta_plots_2T(coefs.ntd, "Crude_18Oct2023")
+
 
 ### big table of all results
-
 
 tab.asdT2 <- meta.res.tab(meta.asdT2)
 tab.asdT3 <- meta.res.tab(meta.asdT3)
@@ -579,13 +1083,186 @@ interweave <- function(early, late){
 big.tab.asd <- interweave(tab.asdT2, tab.asdT3)
 big.tab.ntd <- interweave(tab.ntdT2, tab.ntdT3)
 
-write.xlsx(list(ASD=big.tab.asd, NTD=big.tab.ntd), file=paste0(here(),'/../Tables/meta_estimates_log_epitools_tables_20Sept2023.xlsx'))
+write.xlsx(list(ASD=big.tab.asd, NTD=big.tab.ntd), file=paste0(here(),'/../Tables/meta_estimates_crude_tables_20Sept2023.xlsx'))
+
+```
+
+
+## log binomial
+```{r}
+load(file=paste0(file.path(here(),'../Data/logbin_results_Apr2024.RDA')))
+# load(file=paste0(file.path(here(),'../Data/logbin_results_20Sept2023.RDA')))
+#load(file=paste0(path,'Data/poisson_results.RDA'))
+
+res.asdT2 <- res.asdT2.poi
+res.asdT3 <- res.asdT3.poi
+res.ntdT2 <- res.ntdT2.poi
+res.ntdT3 <- res.ntdT3.poi
+
+metals <- unique(res.asdT2$Analyte.Code) %>% as.character
+
+meta.asdT2 <- meta(res.asdT2)
+meta.asdT3 <- meta(res.asdT3)
+meta.ntdT2 <- meta(res.ntdT2)
+meta.ntdT3 <- meta(res.ntdT3)
+
+
+### format for forest plot
+
+meta.forest <- function(meta.res){
+  lapply(metals, FUN=function(x){
+    res = meta.res[[x]]
+    
+    coefs = data.frame(metal=x,
+               lab=c('Meta','EARLI','MARBLES'),
+               effect=c(res$TE.fixed, res$TE[1], res$TE[2]),
+               lower=c(res$lower.fixed, res$lower[1], res$lower[2]),
+               upper=c(res$upper.fixed, res$upper[1], res$upper[2]))
+    
+    coefs$lab = factor(coefs$lab, levels=c('Meta','EARLI','MARBLES'))
+    
+    coefs$OR = exp(coefs$effect)
+    coefs$OR.lower = exp(coefs$lower)
+    coefs$OR.upper = exp(coefs$upper)
+    
+    coefs$alpha = I(ifelse(coefs$lab=='Meta', 1.0, ifelse(coefs$lab=='EARLI',0.4, 0.2)))
+    
+    coefs$metal = ifelse(res$pval.fixed < 0.05, paste0(coefs$metal,'*'), coefs$metal)
+    
+    coefs$p = res$pval.fixed
+    
+    coefs$shape = I(case_when(coefs$lab=='Meta' & coefs$p < 0.05 ~ 18,
+                              coefs$lab=='Meta' & coefs$p < 0.1 ~ 15,
+                              TRUE ~ 20))
+    
+    coefs
+  })
+}
+
+coefs.asdT2 <- meta.forest(meta.asdT2) %>% bind_rows()
+coefs.asdT3 <- meta.forest(meta.asdT3) %>% bind_rows()
+coefs.ntdT2 <- meta.forest(meta.ntdT2) %>% bind_rows()
+coefs.ntdT3 <- meta.forest(meta.ntdT3) %>% bind_rows()
+
+metals.c <- metals[!metals %in% c('Antimony', "Cadmium", "Chromium", "Lead")]
+metals.c1 <- metals.c[1:7]
+metals.c2 <- metals.c[8:13]
+metals.b <- c('Antimony', "Cadmium", "Chromium", "Lead")
+
+
+### combined timepoint figures
+
+meta_plots_2T <-function(coefs, name){
+  
+  coefs$metal <- gsub("\\*","",coefs$metal)
+  coefs$col <- ifelse(coefs$lab=='EARLI', "gray50", 
+               ifelse(coefs$lab=='MARBLES', "gray45",
+               ifelse(coefs$lab=='Meta' & coefs$p < 0.05, "red2", 
+               ifelse(coefs$lab=='Meta' & coefs$p < 0.1, "orange2", "gray40"))))
+  
+  coefs$size <- ifelse(coefs$shape==15, 0.55, 0.75)
+  
+  forest.bin <- ggplot(data=coefs[grepl(paste(metals.b, collapse='|'), coefs.asdT2$metal),], 
+                       aes(x=lab, y=OR, ymin=OR.lower, ymax=OR.upper, alpha=alpha, shape=shape, col=I(col))) +
+    geom_pointrange(position=position_dodge2(width=1), aes(size=I(size))) +
+    geom_hline(yintercept=1, linetype=2) +
+    theme_bw() + facet_grid(metal ~ time) +
+    theme(text = element_text(size=10), strip.text.y = element_text(angle=0)) +
+    xlab('') + ylab('Risk Ratio') +
+    coord_flip(ylim=c(0,4))
+  
+    forest.con1 <- ggplot(data=coefs[grepl(paste(metals.c1, collapse='|'), coefs.asdT2$metal),], 
+                       aes(x=lab, y=OR, ymin=OR.lower, ymax=OR.upper, alpha=alpha, shape=shape, color=I(col))) +
+    geom_pointrange(position=position_dodge2(width=1), aes(size=I(size))) +
+    geom_hline(yintercept=1, linetype=2) +
+    theme_bw() + facet_grid(metal ~ time) +
+    theme(text = element_text(size=10), strip.text.y = element_text(angle=0), 
+          legend.position = 'none') +
+    xlab('') + ylab('Risk Ratio') +
+    coord_flip(ylim=c(0.5,3))
+    
+    forest.con2 <- ggplot(data=coefs[grepl(paste(metals.c2, collapse='|'), coefs.asdT2$metal),], 
+                       aes(x=lab, y=OR, ymin=OR.lower, ymax=OR.upper, alpha=alpha, shape=shape, color=I(col))) +
+    geom_pointrange(position=position_dodge2(width=1), aes(size=I(size))) +
+    geom_hline(yintercept=1, linetype=2) +
+    theme_bw() + facet_grid(metal ~ time) +
+    theme(text = element_text(size=10), strip.text.y = element_text(angle=0),
+          legend.position = 'none') +
+    xlab('') + ylab('Risk Ratio') +
+    coord_flip(ylim=c(0.5,3))
+
+  #ggsave(forest.bin, file=paste0(path,'/Plots/meta/forest_meta_bin_',name,'.svg'),height=4, width=10)
+  #ggsave(forest.con1, file=paste0(path,'/Plots/meta/forest_meta_con1_',name,'.svg'),height=9, width=10)
+  #ggsave(forest.con2, file=paste0(path,'/Plots/meta/forest_meta_con2_',name,'.svg'),height=9, width=10)
+  
+  combi.plot = grid.arrange(forest.bin, forest.con1, forest.con2,
+                            heights=c(1.4,2),
+                            layout_matrix = rbind(c(4,1,1,4),
+                                                  c(2,2,3,3)))
+  
+  ggsave(combi.plot, file=paste0(here(),'/../Plots/Revised/forest_2time_',name,'.svg'),height=7, width=7.5)
+}
+
+coefs.asdT2$time <- "T1/T2"
+coefs.asdT3$time <- "T3"
+coefs.asd <- rbind(coefs.asdT2, coefs.asdT3)
+
+coefs.ntdT2$time <- "T1/T2"
+coefs.ntdT3$time <- "T3"
+coefs.ntd <- rbind(coefs.ntdT2, coefs.ntdT3)
+
+meta_plots_2T(coefs.asd, "ASD_Apr2024")
+meta_plots_2T(coefs.ntd, "NTD_Apr2024")
+
+
+### big table of all results
+tab.asdT2 <- meta.res.tab(meta.asdT2)
+tab.asdT3 <- meta.res.tab(meta.asdT3)
+tab.ntdT2 <- meta.res.tab(meta.ntdT2)
+tab.ntdT3 <- meta.res.tab(meta.ntdT3)
+
+fdrT2 <- p.adjust(p=c(tab.asdT2[,10],tab.ntdT2[,10]), method="BH") %>% signif(2)
+fdrT3 <- p.adjust(p=c(tab.asdT3[,10],tab.ntdT3[,10]), method="BH") %>% signif(2)
+
+tab.asdT2$FDR <- fdrT2[1:17]
+tab.ntdT2$FDR <- fdrT2[18:34]
+tab.asdT3$FDR <- fdrT3[1:17]
+tab.ntdT3$FDR <- fdrT3[18:34]
+
+
+
+compiled.tab <- list(asdT2=tab.asdT2, asdT3=tab.asdT3, ntdT2=tab.ntdT2, ntdT3=tab.ntdT3)
+
+# write.xlsx(compiled.tab, file=paste0(here(),'/../Tables/meta_estimates_log_epitools_tables_20Sept2023.xlsx'))
+
+### bigger table of all results
+
+interweave <- function(early, late){
+  mets <- early[,1]
+  metal_sections <- lapply(mets, FUN=function(m){
+    info <- data.frame(Metal=c(m,""),Time=c("Early","Late"))
+    dat <- rbind(early[early[,1]==m, c(2:11)],
+                 late[late[,1]==m, c(2:11)])
+    section <- cbind(info, dat)
+    section$Time <- ifelse(section[,11]<0.1, paste0(section$Time,'*'), section$Time)
+    section$Time <- ifelse(section[,11]<0.05, paste0(section$Time,'*'), section$Time)
+    section
+  })
+  
+  do.call(rbind, metal_sections)
+}
+
+big.tab.asd <- interweave(tab.asdT2, tab.asdT3)
+big.tab.ntd <- interweave(tab.ntdT2, tab.ntdT3)
+
+write.xlsx(list(ASD=big.tab.asd, NTD=big.tab.ntd), file=paste0(here(),'/../Tables/Revised/meta_estimates_log_epitools_tables_Apr2024.xlsx'))
 
 ```
 
 ## logistic
 ```{r}
-load(file=paste0(file.path(here(),'../Data/logistic_results_20Sept2023.RDA')))
+load(file=paste0(file.path(here(),'../Data/logistic_results_Apr2024.RDA')))
+# load(file=paste0(file.path(here(),'../Data/logistic_results_20Sept2023.RDA')))
 
 res.asdT2 <- res.asdT2.logit
 res.asdT3 <- res.asdT3.logit
@@ -688,19 +1365,19 @@ meta_plots_2T <-function(coefs, name){
                             layout_matrix = rbind(c(4,1,1,4),
                                                   c(2,2,3,3)))
   
-  ggsave(combi.plot, file=paste0(here(),'/../Plots/meta/forest_2time_',name,'.svg'),height=10, width=16)
+  ggsave(combi.plot, file=paste0(here(),'/../Plots/Revised/forest_2time_',name,'.svg'),height=10, width=16)
 }
 
-coefs.asdT2$time <- "Early"
-coefs.asdT3$time <- "Late"
+coefs.asdT2$time <- "T1/T2"
+coefs.asdT3$time <- "T3"
 coefs.asd <- rbind(coefs.asdT2, coefs.asdT3)
 
-coefs.ntdT2$time <- "Early"
-coefs.ntdT3$time <- "Late"
+coefs.ntdT2$time <- "T1/T2"
+coefs.ntdT3$time <- "T3"
 coefs.ntd <- rbind(coefs.ntdT2, coefs.ntdT3)
 
-meta_plots_2T(coefs.asd, "ASD_logistic_20Sept2023")
-meta_plots_2T(coefs.ntd, "NTD_logistic_20Sept2023")
+meta_plots_2T(coefs.asd, "ASD_logistic_Apr2024")
+meta_plots_2T(coefs.ntd, "NTD_logistic_Apr2024")
 
 ### big table of all results
 
@@ -724,7 +1401,7 @@ tab.ntdT3$FDR <- fdrT3[18:34]
 big.tab.asd <- interweave(tab.asdT2, tab.asdT3)
 big.tab.ntd <- interweave(tab.ntdT2, tab.ntdT3)
 
-write.xlsx(list(ASD=big.tab.asd, NTD=big.tab.ntd), file=paste0(here(),'/../Tables/meta_estimates_logistic_tables_20Sept2023.xlsx'))
+write.xlsx(list(ASD=big.tab.asd, NTD=big.tab.ntd), file=paste0(here(),'/../Tables/Revised/meta_estimates_logistic_tables_Apr2024.xlsx'))
 
 ```
 
@@ -750,21 +1427,21 @@ model_fit_sens2 <- function(pd){
     print(met)
     
     if(mod.type[met] == 'continuous'){
-        fit.asdglm = glm(asd ~ Concentration_imp_sg_log2 + MomEdu + coi_gender + maternal_age + GA_collect + batch, 
+        fit.asdglm = glm(asd ~ Concentration_imp_sg_log2 + MomEdu + coi_gender + maternal_age + MomRaceEth + GA_collect + batch, 
                data=asd, family=binomial)
         fit.asd = probratio(fit.asdglm, scale='log', method='delta')
         
-        fit.ntdglm = glm(asd ~ Concentration_imp_sg_log2 + MomEdu + coi_gender + maternal_age + GA_collect + batch, 
+        fit.ntdglm = glm(asd ~ Concentration_imp_sg_log2 + MomEdu + coi_gender + maternal_age + MomRaceEth + GA_collect + batch, 
                  data=ntd, family=binomial)
         fit.ntd = probratio(fit.ntdglm, scale='log', method='delta')
     }else{
       asd$overLOD <- asd$Concentration > asd$LOD
       ntd$overLOD <- ntd$Concentration > ntd$LOD
-        fit.asdglm = glm(asd ~ overLOD + MomEdu + coi_gender + maternal_age + GA_collect + batch, 
+        fit.asdglm = glm(asd ~ overLOD + MomEdu + coi_gender + maternal_age + GA_collect + MomRaceEth + batch, 
                data=asd, family=binomial)
         fit.asd = probratio(fit.asdglm, scale='log', method='delta')
         
-        fit.ntdglm = glm(asd ~ overLOD + MomEdu + coi_gender + maternal_age + GA_collect + batch, 
+        fit.ntdglm = glm(asd ~ overLOD + MomEdu + coi_gender + maternal_age + GA_collect + MomRaceEth + batch, 
                  data=ntd, family=binomial)
         fit.ntd = probratio(fit.ntdglm, scale='log', method='delta')
     }
@@ -825,16 +1502,16 @@ coefs.asdT3.sens2 <- meta.forest(meta.asdT3.sens2) %>% bind_rows()
 coefs.ntdT2.sens2 <- meta.forest(meta.ntdT2.sens2) %>% bind_rows()
 coefs.ntdT3.sens2 <- meta.forest(meta.ntdT3.sens2) %>% bind_rows()
 
-coefs.asdT2.sens2$time <- "Early"
-coefs.asdT3.sens2$time <- "Late"
+coefs.asdT2.sens2$time <- "T1/T2"
+coefs.asdT3.sens2$time <- "T3"
 coefs.asd.sens2 <- rbind(coefs.asdT2.sens2, coefs.asdT3.sens2)
 
-coefs.ntdT2.sens2$time <- "Early"
-coefs.ntdT3.sens2$time <- "Late"
+coefs.ntdT2.sens2$time <- "T1/T2"
+coefs.ntdT3.sens2$time <- "T3"
 coefs.ntd.sens2 <- rbind(coefs.ntdT2.sens2, coefs.ntdT3.sens2)
 
-meta_plots_2T(coefs.asd.sens2, "ASD_sens_20Sept2023")
-meta_plots_2T(coefs.ntd.sens2, "NTD_sens_20Sept2023")
+meta_plots_2T(coefs.asd.sens2, "ASD_sens_Apr2024")
+meta_plots_2T(coefs.ntd.sens2, "NTD_sens_Apr2024")
 
 
 fdrT2 <- p.adjust(p=c(tab.asdT2.sens2[,10],tab.ntdT2.sens2[,10]), method="BH") %>% signif(2)
@@ -846,21 +1523,21 @@ tab.asdT3.sens2$FDR <- fdrT3[1:17]
 tab.ntdT3.sens2$FDR <- fdrT3[18:34]
 
 
-View(tab.asdT2.sens2)
-View(tab.ntdT2.sens2)
-View(tab.asdT3.sens2)
-View(tab.ntdT3.sens2)
+# View(tab.asdT2.sens2)
+# View(tab.ntdT2.sens2)
+# View(tab.asdT3.sens2)
+# View(tab.ntdT3.sens2)
 
 compiled.tab.sens2 <- list(asdT2=tab.asdT2.sens2, asdT3=tab.asdT3.sens2, ntdT2=tab.ntdT2.sens2, ntdT3=tab.ntdT3.sens2)
 
-write.xlsx(compiled.tab.sens2, file=paste0(here(),'/../Tables/meta_estimates_sensivity_tables_adjust_20Sept2023.xlsx'))
+# write.xlsx(compiled.tab.sens2, file=paste0(here(),'/../Tables/meta_estimates_sensivity_tables_adjust_20Sept2023.xlsx'))
 
 ### bigger table of all results
 
 big.tab.asd.sens2 <- interweave(tab.asdT2.sens2, tab.asdT3.sens2)
 big.tab.ntd.sens2 <- interweave(tab.ntdT2.sens2, tab.ntdT3.sens2)
 
-write.xlsx(list(ASD=big.tab.asd.sens2, NTD=big.tab.ntd.sens2), file=paste0(here(),'/../Tables/meta_estimates_sensivity_tables_20Sept2023.xlsx'))
+write.xlsx(list(ASD=big.tab.asd.sens2, NTD=big.tab.ntd.sens2), file=paste0(here(),'/../Tables/Revised/meta_estimates_sensivity_tables_Apr2024.xlsx'))
 
 ```
 
